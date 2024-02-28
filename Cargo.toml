@@ -1,0 +1,21 @@
+[workspace]
+resolver = "2"
+members = ["crates/zxrag"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+
+[workspace.dependencies]
+anyhow = "1.0.79"
+candle-core = { git = "https://github.com/huggingface/candle.git", version = "0.4.1" }
+candle-examples = { git = "https://github.com/huggingface/candle.git", version = "0.4.1" }
+candle-nn = { git = "https://github.com/huggingface/candle.git", version = "0.4.1" }
+candle-transformers = { git = "https://github.com/huggingface/candle.git", version = "0.4.1" }
+clap = { version = "4.4.16", features = ["derive"] }
+tokenizers = { version = "0.15.2", default-features = false }
+tracing = "0.1.37"
+tracing-chrome = "0.7.1"
+tracing-subscriber = "0.3.7"
+hf-hub = "0.3.2"
+serde_json = "1.0.99"
