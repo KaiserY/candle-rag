@@ -1,8 +1,9 @@
 use clap::Args;
 use clap::{Parser, Subcommand};
-
+use zxrag_backend::conf::init_backend_conf;
 use zxrag_backend::run_backend;
-use zxrag_core::conf::{init_backend_conf, BackendConf};
+use zxrag_backend::trace::init_backend_tracing;
+use zxrag_core::conf::BackendConf;
 
 #[derive(Debug, Default, Args)]
 pub struct CliConfig {
@@ -30,6 +31,8 @@ fn main() -> Result<(), anyhow::Error> {
   match cli.command {
     Commands::Backend(cli_config) => {
       let config: BackendConf = init_backend_conf(&cli_config.config)?;
+
+      init_backend_tracing(&config)?;
 
       run_backend(config)?;
     }

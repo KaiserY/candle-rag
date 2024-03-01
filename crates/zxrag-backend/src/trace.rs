@@ -1,7 +1,6 @@
 use time::format_description::well_known;
 use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-
 use zxrag_core::conf::BackendConf;
 
 pub fn init_backend_tracing(config: &BackendConf) -> Result<(), anyhow::Error> {
