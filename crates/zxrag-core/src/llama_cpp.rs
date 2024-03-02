@@ -15,6 +15,10 @@ use crate::model::{ModelChatSetting, ModelId};
 
 const DEFAULT_PROMPT: &str = "hello ";
 
+pub struct LlamaCppModel {
+
+}
+
 #[derive(Debug)]
 enum Prompt {
   Interactive,

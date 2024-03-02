@@ -1,3 +1,3 @@
 pub mod conf;
 pub mod model;
-pub mod quantized;
+pub mod llama_cpp;

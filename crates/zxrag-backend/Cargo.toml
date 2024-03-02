@@ -14,4 +14,13 @@ tracing-subscriber = { workspace = true }
 tracing-appender = { workspace = true }
 time = { workspace = true }
 serde = { workspace = true }
+serde_json = { workspace = true }
 config = { workspace = true }
+axum = { workspace = true }
+rust-embed = { workspace = true }
+tower-http = { workspace = true }
+mime_guess = { workspace = true }
+hex = { workspace = true }
+either = { workspace = true }
+derive_more = { workspace = true }
+futures= { workspace = true }

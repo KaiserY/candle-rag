@@ -6,6 +6,7 @@ use crate::model::ModelId;
 pub struct BackendConf {
   pub log_file_path: String,
   pub log_file_name: String,
+  pub bind_addr: String,
   pub model_id: ModelId,
   pub model_path: String,
   pub tokenizer_path: String,
