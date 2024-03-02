@@ -1,7 +1,6 @@
-use zxrag_core::{conf::BackendConf, model::ModelChatSetting, quantized::run_quantized};
+use zxrag_core::{conf::BackendConf, model::ModelChatSetting, quantized::run_quantized_llm};
 
 pub mod conf;
-pub mod trace;
 
 #[tokio::main]
 pub async fn run_backend(config: BackendConf) -> Result<(), anyhow::Error> {
@@ -10,7 +9,7 @@ pub async fn run_backend(config: BackendConf) -> Result<(), anyhow::Error> {
   let setting = ModelChatSetting {
     temperature: 0.8,
     top_p: None,
-    sample_len: 1000,
+    sample_len: 128,
     seed: 299792458,
     repeat_penalty: 1.1,
     repeat_last_n: 64,
@@ -18,7 +17,7 @@ pub async fn run_backend(config: BackendConf) -> Result<(), anyhow::Error> {
     prompt: None,
   };
 
-  run_quantized(&config, &setting)?;
+  run_quantized_llm(&config, &setting)?;
 
   Ok(())
 }

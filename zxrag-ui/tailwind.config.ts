@@ -1,9 +1,9 @@
 import type { Config } from "tailwindcss";
 
 export default {
-	content: ["./index.html", "./src/**/*.{css}", "./src/**/*.{ts,tsx}"],
+	content: ["./index.html", "./src/**/*.{ts,tsx,css}"],
 	theme: {
 		extend: {},
 	},
-	plugins: [require("daisyui")],
+	plugins: [require("@tailwindcss/typography"), require("daisyui")],
 } satisfies Config;

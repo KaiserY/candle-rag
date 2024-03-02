@@ -1,11 +1,10 @@
 import "./App.css";
+import { ChatPage } from "./pages/ChatPage";
 
 function App() {
 	return (
 		<>
-			<button type="button" className="btn">
-				Hello daisyUI
-			</button>
+			<ChatPage />
 		</>
 	);
 }

@@ -11,23 +11,20 @@ pub enum ModelId {
   #[serde(rename = "zephyr-7b-beta")]
   #[strum(serialize = "zephyr-7b-beta")]
   Zephyr7bBeta,
+  #[serde(rename = "gemma-2b-it")]
+  #[strum(serialize = "gemma-2b-it")]
+  Gemma2bIt,
   #[default]
   None,
 }
 
 impl ModelId {
   pub fn is_mistral(&self) -> bool {
-    match self {
-      Self::Zephyr7bAlpha | Self::Zephyr7bBeta => true,
-      Self::None => false,
-    }
+    matches!(self, Self::Zephyr7bAlpha | Self::Zephyr7bBeta)
   }
 
   pub fn is_zephyr(&self) -> bool {
-    match self {
-      Self::Zephyr7bAlpha | Self::Zephyr7bBeta => true,
-      Self::None => false,
-    }
+    matches!(self, Self::Zephyr7bAlpha | Self::Zephyr7bBeta)
   }
 
   pub fn is_open_chat(&self) -> bool {

@@ -13,7 +13,7 @@ use model::ModelWeights;
 use crate::conf::BackendConf;
 use crate::model::{ModelChatSetting, ModelId};
 
-const DEFAULT_PROMPT: &str = "My favorite theorem is ";
+const DEFAULT_PROMPT: &str = "hello ";
 
 #[derive(Debug)]
 enum Prompt {
@@ -34,7 +34,10 @@ fn format_size(size_in_bytes: usize) -> String {
   }
 }
 
-pub fn run_quantized(conf: &BackendConf, setting: &ModelChatSetting) -> Result<(), anyhow::Error> {
+pub fn run_quantized_llm(
+  conf: &BackendConf,
+  setting: &ModelChatSetting,
+) -> Result<(), anyhow::Error> {
   let temperature = if setting.temperature == 0. {
     None
   } else {
@@ -92,8 +95,8 @@ pub fn run_quantized(conf: &BackendConf, setting: &ModelChatSetting) -> Result<(
       );
       println!("params: {:?}", model.hparams);
       let default_gqa = match conf.model_id {
-        ModelId::None => 1,
         ModelId::Zephyr7bAlpha | ModelId::Zephyr7bBeta => 8,
+        _ => 1,
       };
       ModelWeights::from_ggml(model, default_gqa)?
     }

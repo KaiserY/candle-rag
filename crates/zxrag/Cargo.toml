@@ -10,3 +10,7 @@ zxrag-core = { workspace = true }
 zxrag-backend = { workspace = true }
 anyhow = { workspace = true }
 clap = { workspace = true }
+time = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+tracing-appender = { workspace = true }
