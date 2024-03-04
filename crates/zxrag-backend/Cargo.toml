@@ -23,4 +23,6 @@ mime_guess = { workspace = true }
 hex = { workspace = true }
 either = { workspace = true }
 derive_more = { workspace = true }
-futures= { workspace = true }
+futures = { workspace = true }
+uuid = { workspace = true }
+tinyvec = { workspace = true }

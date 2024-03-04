@@ -1,20 +1,111 @@
 use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
 use derive_more::{Deref, DerefMut, From};
 use either::Either;
+#[allow(unused_imports)]
 use futures::{Stream, StreamExt, TryStream};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
+use time::OffsetDateTime;
+use tinyvec::{tiny_vec, TinyVec};
+use uuid::Uuid;
 
 use crate::error::BackendError;
 
 pub async fn chat_completions(
   Json(req): Json<ChatCompletionRequest<'_>>,
 ) -> Result<impl IntoResponse, BackendError> {
-  let stream_response = req.stream.unwrap_or(false);
+  let untokenized_context = format!("{}<|ASSISTANT|>", req.messages);
 
+  let mut args = CompletionArgs {
+    prompt: untokenized_context,
+    seed: req.seed,
+    ..Default::default()
+  };
+
+  if let Some(one_shot) = req.one_shot {
+    args.one_shot = one_shot;
+  }
+
+  if let Some(frequency_penalty) = req.frequency_penalty {
+    args.frequency_penalty = frequency_penalty;
+  }
+
+  // let stream_response = req.stream.unwrap_or(false);
+
+  // let fp = format!("zxrag-{}", "0.1.0");
+  // let response = if stream_response {
+  //   let completions_stream =
+  //     crate::llm::chat_completion_stream(model, args)
+  //       .await?
+  //       .map(move |chunk| {
+  //         Event::default().json_data(ChatCompletionChunk {
+  //           id: Uuid::new_v4().to_string().into(),
+  //           choices: tiny_vec![ChatCompletionChunkChoice {
+  //             index: 0,
+  //             finish_reason: None,
+  //             delta: ChatCompletionChunkDelta {
+  //               content: Some(Cow::Owned(chunk)),
+  //               role: None,
+  //             },
+  //           }],
+  //           created: OffsetDateTime::now_utc().unix_timestamp(),
+  //           model: Cow::Borrowed("main"),
+  //           system_fingerprint: Cow::Borrowed(&fp), // use macro for version
+  //           object: Cow::Borrowed("text_completion"),
+  //         })
+  //       });
+
+  //   ChatCompletionResponse::Stream(Sse::new(completions_stream))
+  // } else {
+  //   let content_str = crate::llm::chat_completion(model, args).await?;
+  //   let response = ChatCompletion {
+  //     id: Uuid::new_v4().to_string().into(),
+  //     choices: vec![ChatCompletionChoice {
+  //       message: ChatMessage::Assistant {
+  //         content: Some(Cow::Owned(content_str)),
+  //         name: None,
+  //         tool_calls: None,
+  //       },
+  //       finish_reason: None,
+  //       index: 0,
+  //     }],
+  //     created: OffsetDateTime::now_utc().unix_timestamp(),
+  //     model: Cow::Borrowed("main"),
+  //     object: Cow::Borrowed("text_completion"),
+  //     system_fingerprint: Cow::Owned(fp),
+  //     usage: ChatCompletionUsage {
+  //       completion_tokens: 0,
+  //       prompt_tokens: 0,
+  //       total_tokens: 0,
+  //     },
+  //   };
+
+  //   ChatCompletionResponse::Full(Json(response))
+  // };
+
+  // Ok(response)
   Ok(())
+}
+
+#[derive(Debug, Clone)]
+pub struct CompletionArgs {
+  pub prompt: String,
+  pub one_shot: bool,
+  pub seed: Option<u32>,
+  pub frequency_penalty: f32,
+}
+
+impl Default for CompletionArgs {
+  fn default() -> Self {
+    Self {
+      prompt: "".to_string(),
+      one_shot: false,
+      seed: None,
+      frequency_penalty: 0.0,
+    }
+  }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -236,4 +327,27 @@ pub struct ChatCompletionUsage {
   pub completion_tokens: u32,
   pub prompt_tokens: u32,
   pub total_tokens: u32,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct ChatCompletionChunk<'a> {
+  pub id: Cow<'a, str>,
+  pub choices: TinyVec<[ChatCompletionChunkChoice<'a>; 1]>,
+  pub created: i64,
+  pub model: Cow<'a, str>,
+  pub system_fingerprint: Cow<'a, str>,
+  pub object: Cow<'a, str>,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct ChatCompletionChunkChoice<'a> {
+  pub delta: ChatCompletionChunkDelta<'a>,
+  pub finish_reason: Option<Cow<'a, str>>,
+  pub index: u32,
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct ChatCompletionChunkDelta<'a> {
+  pub content: Option<Cow<'a, str>>,
+  pub role: Option<Cow<'a, str>>,
 }

@@ -32,7 +32,7 @@ impl ModelId {
   }
 }
 
-pub struct ModelChatSetting {
+pub struct ChatCompletionSetting {
   pub temperature: f64,
   pub top_p: Option<f64>,
   pub seed: u64,
@@ -41,4 +41,5 @@ pub struct ModelChatSetting {
   pub split_prompt: bool,
   pub sample_len: usize,
   pub prompt: Option<String>,
+  pub one_shot: bool,
 }
