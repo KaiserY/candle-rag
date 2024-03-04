@@ -14,3 +14,4 @@ candle-core = { workspace = true }
 candle-transformers = { workspace = true }
 candle-examples = { workspace = true }
 tokenizers = { workspace = true }
+tracing = { workspace = true }
