@@ -1,7 +1,6 @@
 use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
 use derive_more::{Deref, DerefMut, From};
 use either::Either;
-#[allow(unused_imports)]
 use futures::{Stream, StreamExt, TryStream};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
@@ -10,6 +9,10 @@ use std::fmt::{Display, Formatter};
 use time::OffsetDateTime;
 use tinyvec::{tiny_vec, TinyVec};
 use uuid::Uuid;
+use zxrag_core::llama_cpp::{
+  chat_completion_stream, LlamaCppChatCompletionStream, LLAMA_CPP_MODEL,
+};
+use zxrag_core::model::ChatCompletionSetting;
 
 use crate::error::BackendError;
 
@@ -32,61 +35,46 @@ pub async fn chat_completions(
     args.frequency_penalty = frequency_penalty;
   }
 
-  // let stream_response = req.stream.unwrap_or(false);
+  let fp = format!("zxrag-{}", "0.1.0");
 
-  // let fp = format!("zxrag-{}", "0.1.0");
-  // let response = if stream_response {
-  //   let completions_stream =
-  //     crate::llm::chat_completion_stream(model, args)
-  //       .await?
-  //       .map(move |chunk| {
-  //         Event::default().json_data(ChatCompletionChunk {
-  //           id: Uuid::new_v4().to_string().into(),
-  //           choices: tiny_vec![ChatCompletionChunkChoice {
-  //             index: 0,
-  //             finish_reason: None,
-  //             delta: ChatCompletionChunkDelta {
-  //               content: Some(Cow::Owned(chunk)),
-  //               role: None,
-  //             },
-  //           }],
-  //           created: OffsetDateTime::now_utc().unix_timestamp(),
-  //           model: Cow::Borrowed("main"),
-  //           system_fingerprint: Cow::Borrowed(&fp), // use macro for version
-  //           object: Cow::Borrowed("text_completion"),
-  //         })
-  //       });
+  let model = (*LLAMA_CPP_MODEL.get().expect("")).clone();
 
-  //   ChatCompletionResponse::Stream(Sse::new(completions_stream))
-  // } else {
-  //   let content_str = crate::llm::chat_completion(model, args).await?;
-  //   let response = ChatCompletion {
-  //     id: Uuid::new_v4().to_string().into(),
-  //     choices: vec![ChatCompletionChoice {
-  //       message: ChatMessage::Assistant {
-  //         content: Some(Cow::Owned(content_str)),
-  //         name: None,
-  //         tool_calls: None,
-  //       },
-  //       finish_reason: None,
-  //       index: 0,
-  //     }],
-  //     created: OffsetDateTime::now_utc().unix_timestamp(),
-  //     model: Cow::Borrowed("main"),
-  //     object: Cow::Borrowed("text_completion"),
-  //     system_fingerprint: Cow::Owned(fp),
-  //     usage: ChatCompletionUsage {
-  //       completion_tokens: 0,
-  //       prompt_tokens: 0,
-  //       total_tokens: 0,
-  //     },
-  //   };
+  let setting = ChatCompletionSetting {
+    temperature: 0.8,
+    top_p: None,
+    seed: 299792458,
+    repeat_penalty: 1.1,
+    repeat_last_n: 64,
+    split_prompt: false,
+    sample_len: 128,
+    prompt: None,
+    one_shot: false,
+  };
 
-  //   ChatCompletionResponse::Full(Json(response))
-  // };
+  let stream = LlamaCppChatCompletionStream { model, setting };
 
-  // Ok(response)
-  Ok(())
+  let completions_stream = chat_completion_stream(stream).await?.map(move |chunk| {
+    Event::default().json_data(ChatCompletionChunk {
+      id: Uuid::new_v4().to_string().into(),
+      choices: tiny_vec![ChatCompletionChunkChoice {
+        index: 0,
+        finish_reason: None,
+        delta: ChatCompletionChunkDelta {
+          content: Some(Cow::Owned(chunk)),
+          role: None,
+        },
+      }],
+      created: OffsetDateTime::now_utc().unix_timestamp(),
+      model: Cow::Borrowed("main"),
+      system_fingerprint: Cow::Borrowed(&fp), // use macro for version
+      object: Cow::Borrowed("text_completion"),
+    })
+  });
+
+  let response = ChatCompletionResponse::Stream(Sse::new(completions_stream));
+
+  Ok(response)
+  // Ok(())
 }
 
 #[derive(Debug, Clone)]

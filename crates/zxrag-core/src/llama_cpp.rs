@@ -4,11 +4,15 @@ use candle_examples::token_output_stream::TokenOutputStream;
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::quantized_llama as model;
 use futures::Stream;
+#[allow(unused_imports)]
+use futures::StreamExt;
 use model::ModelWeights;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::OnceLock;
+use std::task::{Context, Poll};
 use tokenizers::Tokenizer;
 
 use crate::model::{ChatCompletionSetting, ModelId};
@@ -30,7 +34,6 @@ pub struct LlamaCppModel {
   pub config: LlamaCppModelConf,
   model_weights: ModelWeights,
   tokenizer: Tokenizer,
-  // token_output_stream: TokenOutputStream,
 }
 
 impl LlamaCppModel {
@@ -266,31 +269,6 @@ impl LlamaCppModel {
 
     Ok(())
   }
-
-  // pub async fn stream_chat_completions(
-  //   &self,
-  //   args: ChatCompletionSetting,
-  // ) -> Result<Box<dyn Stream<Item = String> + Unpin + Send>, anyhow::Error> {
-  //   let (model_signal, model_guard) = get_or_init_model(&self.model, &self.path).await?;
-
-  //   let mut params = SessionParams::default();
-  //   let threads = SETTINGS.read().await.read().await.auto_threads(false);
-
-  //   // TODO handle optional params
-  //   //params.seed = args.seed;
-  //   params.n_threads = threads;
-  //   params.n_threads_batch = threads;
-  //   params.n_ctx = CONTEXT_SIZE;
-
-  //   let session = model_guard
-  //     .create_session(params)
-  //     .map_err(move |e| LLMEndpointError::SessionCreationFailed(e.to_string()))?;
-  //   let sampler = StandardSampler::default();
-
-  //   Ok(Box::new(
-  //     CompletionStream::new_oneshot(session, &args.prompt, model_signal, sampler).await?,
-  //   ))
-  // }
 }
 
 #[derive(Debug)]
@@ -312,25 +290,34 @@ fn format_size(size_in_bytes: usize) -> String {
   }
 }
 
-// pub async fn chat_completion_stream(
-//   args: ChatCompletionSetting,
-// ) -> Result<StoppingStream<Box<dyn Stream<Item = String> + Unpin + Send>>, anyhow::Error> {
-//   let stream = ENDPOINT
-//     .stream_chat_completions(
-//       model
-//         .file_path()
-//         .map_err(move |e| LLMEndpointError::Load(e.to_string()))?,
-//       args,
-//     )
-//     .await?;
+#[pin_project::pin_project]
+pub struct LlamaCppChatCompletionStream {
+  pub model: LlamaCppModel,
+  pub setting: ChatCompletionSetting,
+}
 
-//   Ok(StoppingStream::wrap_with_stop_words(
-//     stream,
-//     vec![
-//       "<|ASSISTANT|>".to_string(),
-//       "<|USER|>".to_string(),
-//       "<|TOOL|>".to_string(),
-//       "<|SYSTEM|>".to_string(),
-//     ],
-//   ))
-// }
+impl Stream for LlamaCppChatCompletionStream {
+  type Item = String;
+
+  fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    match std::pin::pin!(&mut self).poll_next(cx) {
+      Poll::Ready(Some(val)) => Poll::Ready(Some(val)),
+      Poll::Ready(None) => Poll::Ready(None),
+      Poll::Pending => Poll::Pending,
+    }
+  }
+}
+
+impl Iterator for LlamaCppChatCompletionStream {
+  type Item = String;
+
+  fn next(&mut self) -> Option<Self::Item> {
+    Some("".to_string())
+  }
+}
+
+pub async fn chat_completion_stream(
+  stream: LlamaCppChatCompletionStream,
+) -> Result<StoppingStream<Box<dyn Stream<Item = String> + Unpin + Send>>, anyhow::Error> {
+  Ok(StoppingStream::new(Box::new(Box::pin(Box::new(stream)))))
+}
