@@ -6,7 +6,9 @@ use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use zxrag_backend::conf::init_backend_conf;
 use zxrag_backend::run_backend;
 use zxrag_core::conf::BackendConf;
-use zxrag_core::llama_cpp::{LlamaCppModel, LlamaCppModelConf, LLAMA_CPP_MODEL};
+use zxrag_core::llama_cpp::{
+  LlamaCppModel, LlamaCppModelConf, LlamaCppModelPipeline, LLAMA_CPP_MODEL,
+};
 use zxrag_core::model::ChatCompletionSetting;
 
 #[derive(Debug, Default, Args)]
@@ -81,7 +83,7 @@ fn main() -> Result<(), anyhow::Error> {
         tokenizer_path: config.tokenizer_path,
       };
 
-      let mut model = (*LLAMA_CPP_MODEL
+      let model = (*LLAMA_CPP_MODEL
         .get_or_init(|| LlamaCppModel::load_model(model_config).expect("")))
       .clone();
 
@@ -91,13 +93,14 @@ fn main() -> Result<(), anyhow::Error> {
         seed: 299792458,
         repeat_penalty: 1.1,
         repeat_last_n: 64,
-        split_prompt: false,
         sample_len: 128,
         prompt: None,
         one_shot: false,
       };
 
-      model.run_model(&setting)?;
+      let mut pipeline = LlamaCppModelPipeline::init_pipeline(model, setting)?;
+
+      pipeline.run_cli()?;
     }
   }
 

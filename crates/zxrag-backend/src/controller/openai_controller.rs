@@ -45,7 +45,6 @@ pub async fn chat_completions(
     seed: 299792458,
     repeat_penalty: 1.1,
     repeat_last_n: 64,
-    split_prompt: false,
     sample_len: 128,
     prompt: None,
     one_shot: false,

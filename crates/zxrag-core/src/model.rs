@@ -39,7 +39,6 @@ pub struct ChatCompletionSetting {
   pub seed: u64,
   pub repeat_penalty: f32,
   pub repeat_last_n: usize,
-  pub split_prompt: bool,
   pub sample_len: usize,
   pub prompt: Option<String>,
   pub one_shot: bool,
