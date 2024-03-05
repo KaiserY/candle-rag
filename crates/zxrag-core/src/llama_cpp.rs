@@ -1,5 +1,5 @@
 use candle_core::quantized::{ggml_file, gguf_file};
-use candle_core::Tensor;
+use candle_core::{Device, Tensor};
 use candle_examples::token_output_stream::TokenOutputStream;
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::quantized_llama as model;
@@ -271,7 +271,219 @@ impl LlamaCppModel {
   }
 }
 
-#[derive(Debug)]
+pub struct LlamaCppModelPipeline {
+  pub model: LlamaCppModel,
+  prompt: Prompt,
+  device: Device,
+  token_output_stream: TokenOutputStream,
+  pre_prompt_tokens: Vec<u32>,
+  to_sample: usize,
+  prompt_tokens: Vec<u32>,
+  all_tokens: Vec<u32>,
+  next_token: u32,
+  eos_token: u32,
+  logits_processor: LogitsProcessor,
+  split_prompt: bool,
+  repeat_penalty: f32,
+  repeat_last_n: usize,
+}
+
+impl LlamaCppModelPipeline {
+  pub fn init_pipeline(
+    model: LlamaCppModel,
+    setting: ChatCompletionSetting,
+  ) -> anyhow::Result<Self> {
+    let temperature = if setting.temperature == 0. {
+      None
+    } else {
+      Some(setting.temperature)
+    };
+
+    let device = candle_examples::device(true)?;
+
+    let prompt = match setting.prompt.as_deref() {
+      Some("chat") => Prompt::Chat,
+      Some("interactive") => Prompt::Interactive,
+      Some(s) => Prompt::One(s.to_string()),
+      None => Prompt::One(DEFAULT_PROMPT.to_string()),
+    };
+
+    let token_output_stream = TokenOutputStream::new(model.tokenizer.clone());
+
+    let logits_processor = LogitsProcessor::new(setting.seed, temperature, setting.top_p);
+
+    let eos_token = if model.config.model_id.is_open_chat() {
+      "<|end_of_turn|>"
+    } else {
+      "</s>"
+    };
+
+    let eos_token = *token_output_stream
+      .tokenizer()
+      .get_vocab(true)
+      .get(eos_token)
+      .unwrap();
+
+    Ok(LlamaCppModelPipeline {
+      model,
+      device,
+      prompt,
+      token_output_stream,
+      pre_prompt_tokens: vec![],
+      to_sample: setting.sample_len.saturating_sub(1),
+      prompt_tokens: vec![],
+      all_tokens: vec![],
+      next_token: 0,
+      eos_token: eos_token,
+      logits_processor,
+      split_prompt: false,
+      repeat_penalty: setting.repeat_penalty,
+      repeat_last_n: setting.repeat_last_n,
+    })
+  }
+
+  pub fn run_cli(&mut self) -> anyhow::Result<()> {
+    for prompt_index in 0.. {
+      let prompt_str = match &self.prompt {
+        Prompt::One(prompt) => prompt.clone(),
+        Prompt::Interactive | Prompt::Chat => {
+          let is_interactive = matches!(self.prompt, Prompt::Interactive);
+          print!("> ");
+          std::io::stdout().flush()?;
+          let mut prompt = String::new();
+          std::io::stdin().read_line(&mut prompt)?;
+          if prompt.ends_with('\n') {
+            prompt.pop();
+            if prompt.ends_with('\r') {
+              prompt.pop();
+            }
+          }
+          if self.model.config.model_id.is_open_chat() {
+            format!("GPT4 Correct User: {prompt}<|end_of_turn|>GPT4 Correct Assistant:")
+          } else if self.model.config.model_id.is_zephyr() {
+            if prompt_index == 0 || is_interactive {
+              format!("<|system|>\n</s>\n<|user|>\n{prompt}</s>\n<|assistant|>",)
+            } else {
+              format!("<|user|>\n{prompt}</s>\n<|assistant|>")
+            }
+          } else if self.model.config.model_id.is_mistral() {
+            format!("[INST] {prompt} [/INST]")
+          } else {
+            prompt
+          }
+        }
+      };
+      print!("{}", &prompt_str);
+      let tokens = self
+        .token_output_stream
+        .tokenizer()
+        .encode(prompt_str, true)
+        .map_err(anyhow::Error::msg)?;
+
+      let prompt_tokens = [&self.pre_prompt_tokens, tokens.get_ids()].concat();
+
+      self.prompt_tokens = if prompt_tokens.len() + self.to_sample > model::MAX_SEQ_LEN - 10 {
+        let to_remove = prompt_tokens.len() + self.to_sample + 10 - model::MAX_SEQ_LEN;
+        prompt_tokens[prompt_tokens.len().saturating_sub(to_remove)..].to_vec()
+      } else {
+        prompt_tokens
+      };
+
+      let start_prompt_processing = std::time::Instant::now();
+      self.next_token = if !self.split_prompt {
+        let input = Tensor::new(self.prompt_tokens.as_slice(), &self.device)?.unsqueeze(0)?;
+        let logits = self.model.model_weights.forward(&input, 0)?;
+        let logits = logits.squeeze(0)?;
+        self.logits_processor.sample(&logits)?
+      } else {
+        let mut next_token = 0;
+        for (pos, token) in self.prompt_tokens.iter().enumerate() {
+          let input = Tensor::new(&[*token], &self.device)?.unsqueeze(0)?;
+          let logits = self.model.model_weights.forward(&input, pos)?;
+          let logits = logits.squeeze(0)?;
+          next_token = self.logits_processor.sample(&logits)?
+        }
+        next_token
+      };
+
+      let prompt_dt = start_prompt_processing.elapsed();
+      self.all_tokens.push(self.next_token);
+      if let Some(t) = self.token_output_stream.next_token(self.next_token)? {
+        print!("{t}");
+        std::io::stdout().flush()?;
+      }
+
+      let start_post_prompt = std::time::Instant::now();
+      let mut sampled = 0;
+      for index in 0..self.to_sample {
+        let input = Tensor::new(&[self.next_token], &self.device)?.unsqueeze(0)?;
+        let logits = self
+          .model
+          .model_weights
+          .forward(&input, self.prompt_tokens.len() + index)?;
+        let logits = logits.squeeze(0)?;
+        let logits = if self.repeat_penalty == 1. {
+          logits
+        } else {
+          let start_at = self.all_tokens.len().saturating_sub(self.repeat_last_n);
+          candle_transformers::utils::apply_repeat_penalty(
+            &logits,
+            self.repeat_penalty,
+            &self.all_tokens[start_at..],
+          )?
+        };
+        self.next_token = self.logits_processor.sample(&logits)?;
+        self.all_tokens.push(self.next_token);
+        if let Some(t) = self.token_output_stream.next_token(self.next_token)? {
+          print!("{t}");
+          std::io::stdout().flush()?;
+        }
+        sampled += 1;
+        if self.next_token == self.eos_token {
+          break;
+        };
+      }
+      if let Some(rest) = self
+        .token_output_stream
+        .decode_rest()
+        .map_err(candle_core::Error::msg)?
+      {
+        print!("{rest}");
+      }
+
+      std::io::stdout().flush()?;
+      let dt = start_post_prompt.elapsed();
+
+      tracing::info!(
+        "\n\n{:4} prompt tokens processed: {:.2} token/s",
+        self.prompt_tokens.len(),
+        self.prompt_tokens.len() as f64 / prompt_dt.as_secs_f64(),
+      );
+
+      tracing::info!(
+        "{sampled:4} tokens generated: {:.2} token/s",
+        sampled as f64 / dt.as_secs_f64(),
+      );
+
+      match self.prompt {
+        Prompt::One(_) => break,
+        Prompt::Interactive => {}
+        Prompt::Chat => {
+          self.pre_prompt_tokens =
+            [self.prompt_tokens.as_slice(), self.all_tokens.as_slice()].concat()
+        }
+      }
+    }
+
+    Ok(())
+  }
+
+  fn next_token(&mut self) -> anyhow::Result<u32> {
+    Ok(0)
+  }
+}
+
+#[derive(Debug, Clone)]
 enum Prompt {
   Interactive,
   Chat,

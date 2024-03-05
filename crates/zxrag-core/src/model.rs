@@ -32,6 +32,7 @@ impl ModelId {
   }
 }
 
+#[derive(Debug, Clone)]
 pub struct ChatCompletionSetting {
   pub temperature: f64,
   pub top_p: Option<f64>,
