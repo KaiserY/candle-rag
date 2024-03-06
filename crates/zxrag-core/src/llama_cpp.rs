@@ -18,7 +18,7 @@ use tokenizers::Tokenizer;
 use crate::model::{ChatCompletionSetting, ModelId};
 use crate::stopping_stream::StoppingStream;
 
-const DEFAULT_PROMPT: &str = "hello ";
+const DEFAULT_PROMPT: &str = "My favorite theorem is ";
 
 pub static LLAMA_CPP_MODEL: OnceLock<LlamaCppModel> = OnceLock::new();
 
@@ -118,9 +118,7 @@ pub struct LlamaCppModelPipeline {
   token_output_stream: TokenOutputStream,
   pre_prompt_tokens: Vec<u32>,
   to_sample: usize,
-  prompt_tokens: Vec<u32>,
   all_tokens: Vec<u32>,
-  next_token: u32,
   eos_token: u32,
   logits_processor: LogitsProcessor,
   repeat_penalty: f32,
@@ -170,9 +168,7 @@ impl LlamaCppModelPipeline {
       token_output_stream,
       pre_prompt_tokens: vec![],
       to_sample: setting.sample_len.saturating_sub(1),
-      prompt_tokens: vec![],
       all_tokens: vec![],
-      next_token: 0,
       eos_token: eos_token,
       logits_processor,
       repeat_penalty: setting.repeat_penalty,
@@ -220,9 +216,9 @@ impl LlamaCppModelPipeline {
         .encode(prompt_str, true)
         .map_err(anyhow::Error::msg)?;
 
-      let prompt_tokens = [&self.pre_prompt_tokens, tokens.get_ids()].concat();
+      let mut prompt_tokens = [&self.pre_prompt_tokens, tokens.get_ids()].concat();
 
-      self.prompt_tokens = if prompt_tokens.len() + self.to_sample > model::MAX_SEQ_LEN - 10 {
+      prompt_tokens = if prompt_tokens.len() + self.to_sample > model::MAX_SEQ_LEN - 10 {
         let to_remove = prompt_tokens.len() + self.to_sample + 10 - model::MAX_SEQ_LEN;
         prompt_tokens[prompt_tokens.len().saturating_sub(to_remove)..].to_vec()
       } else {
@@ -231,35 +227,25 @@ impl LlamaCppModelPipeline {
 
       let start_prompt_processing = std::time::Instant::now();
 
-      let input = Tensor::new(self.prompt_tokens.as_slice(), &self.device)?.unsqueeze(0)?;
-      let logits = self.model.model_weights.forward(&input, 0)?;
-      let logits = logits.squeeze(0)?;
-      self.next_token = self.logits_processor.sample(&logits)?;
-
       let prompt_dt = start_prompt_processing.elapsed();
 
-      self.all_tokens.push(self.next_token);
-
-      if let Some(t) = self.token_output_stream.next_token(self.next_token)? {
-        tracing::info!("t={}", t);
-
-        print!("{t}");
-        std::io::stdout().flush()?;
-      }
+      self.all_tokens.extend(prompt_tokens.clone());
 
       let start_post_prompt = std::time::Instant::now();
       let mut sampled = 0;
       for index in 0..self.to_sample {
-        self.next_token = self.forward(index)?;
+        let next_token = self.forward(index)?;
 
-        self.all_tokens.push(self.next_token);
+        self.all_tokens.push(next_token);
 
-        if let Some(t) = self.token_output_stream.next_token(self.next_token)? {
+        if let Some(t) = self.token_output_stream.next_token(next_token)? {
           print!("{t}");
           std::io::stdout().flush()?;
         }
+
         sampled += 1;
-        if self.next_token == self.eos_token {
+
+        if next_token == self.eos_token {
           break;
         };
       }
@@ -276,8 +262,8 @@ impl LlamaCppModelPipeline {
 
       tracing::info!(
         "\n\n{:4} prompt tokens processed: {:.2} token/s",
-        self.prompt_tokens.len(),
-        self.prompt_tokens.len() as f64 / prompt_dt.as_secs_f64(),
+        prompt_tokens.len(),
+        prompt_tokens.len() as f64 / prompt_dt.as_secs_f64(),
       );
 
       tracing::info!(
@@ -289,8 +275,7 @@ impl LlamaCppModelPipeline {
         Prompt::One(_) => break,
         Prompt::Interactive => {}
         Prompt::Chat => {
-          self.pre_prompt_tokens =
-            [self.prompt_tokens.as_slice(), self.all_tokens.as_slice()].concat()
+          self.pre_prompt_tokens = [prompt_tokens.as_slice(), self.all_tokens.as_slice()].concat()
         }
       }
     }
@@ -299,12 +284,15 @@ impl LlamaCppModelPipeline {
   }
 
   fn forward(&mut self, index: usize) -> anyhow::Result<u32> {
-    let input = Tensor::new(&[self.next_token], &self.device)?.unsqueeze(0)?;
+    let context_size = if index > 0 { 1 } else { self.all_tokens.len() };
 
-    let logits = self
-      .model
-      .model_weights
-      .forward(&input, self.prompt_tokens.len() + index)?;
+    let start_pos = self.all_tokens.len().saturating_sub(context_size);
+
+    let ctxt = &self.all_tokens[start_pos..];
+
+    let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
+
+    let logits = self.model.model_weights.forward(&input, start_pos)?;
 
     let logits = logits.squeeze(0)?;
 
