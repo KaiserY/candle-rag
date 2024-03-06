@@ -9,10 +9,10 @@ use std::fmt::{Display, Formatter};
 use time::OffsetDateTime;
 use tinyvec::{tiny_vec, TinyVec};
 use uuid::Uuid;
-use zxrag_core::llama_cpp::{
-  chat_completion_stream, LlamaCppChatCompletionStream, LLAMA_CPP_MODEL,
+use zxrag_core::models::llama_cpp::{
+  chat_completion_stream, TextGeneration, TextGenerationStream, MODEL,
 };
-use zxrag_core::model::ChatCompletionSetting;
+use zxrag_core::types::conf::ChatCompletionSetting;
 
 use crate::error::BackendError;
 
@@ -37,7 +37,7 @@ pub async fn chat_completions(
 
   let fp = format!("zxrag-{}", "0.1.0");
 
-  let model = (*LLAMA_CPP_MODEL.get().expect("")).clone();
+  let model = (*MODEL.get().expect("")).clone();
 
   let setting = ChatCompletionSetting {
     temperature: 0.8,
@@ -47,10 +47,9 @@ pub async fn chat_completions(
     repeat_last_n: 64,
     sample_len: 128,
     prompt: None,
-    one_shot: false,
   };
 
-  let stream = LlamaCppChatCompletionStream { model, setting };
+  let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?;
 
   let completions_stream = chat_completion_stream(stream).await?.map(move |chunk| {
     Event::default().json_data(ChatCompletionChunk {
@@ -73,7 +72,6 @@ pub async fn chat_completions(
   let response = ChatCompletionResponse::Stream(Sse::new(completions_stream));
 
   Ok(response)
-  // Ok(())
 }
 
 #[derive(Debug, Clone)]

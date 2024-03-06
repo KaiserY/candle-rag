@@ -1,4 +1,4 @@
-use zxrag_core::conf::BackendConf;
+use zxrag_core::types::conf::BackendConf;
 
 pub fn init_backend_conf(cli_conf_path: &str) -> Result<BackendConf, anyhow::Error> {
   let config: BackendConf = config::Config::builder()

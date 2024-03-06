@@ -5,11 +5,9 @@ use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use zxrag_backend::conf::init_backend_conf;
 use zxrag_backend::run_backend;
-use zxrag_core::conf::BackendConf;
-use zxrag_core::llama_cpp::{
-  LlamaCppModel, LlamaCppModelConf, LlamaCppModelPipeline, LLAMA_CPP_MODEL,
-};
-use zxrag_core::model::ChatCompletionSetting;
+use zxrag_core::models::llama_cpp::{Config, Model, TextGeneration, MODEL};
+use zxrag_core::types::conf::BackendConf;
+use zxrag_core::types::conf::ChatCompletionSetting;
 
 #[derive(Debug, Default, Args)]
 pub struct CliConfig {
@@ -77,15 +75,15 @@ fn main() -> Result<(), anyhow::Error> {
         .without_time()
         .init();
 
-      let model_config = LlamaCppModelConf {
+      let model_config = Config {
         model_id: config.model_id,
         model_path: config.model_path,
         tokenizer_path: config.tokenizer_path,
+        device: config.device,
       };
 
-      let model = (*LLAMA_CPP_MODEL
-        .get_or_init(|| LlamaCppModel::load_model(model_config).expect("")))
-      .clone();
+      let model =
+        (*MODEL.get_or_init(|| Model::new(&model_config).expect("init model failed"))).clone();
 
       let setting = ChatCompletionSetting {
         temperature: 0.8,
@@ -95,12 +93,11 @@ fn main() -> Result<(), anyhow::Error> {
         repeat_last_n: 64,
         sample_len: 128,
         prompt: None,
-        one_shot: false,
       };
 
-      let mut pipeline = LlamaCppModelPipeline::init_pipeline(model, setting)?;
+      let mut text_gen = TextGeneration::new(model, setting)?;
 
-      pipeline.run_cli()?;
+      text_gen.run()?;
     }
   }
 

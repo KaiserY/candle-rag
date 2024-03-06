@@ -43,15 +43,3 @@ impl ModelId {
     false
   }
 }
-
-#[derive(Debug, Clone)]
-pub struct ChatCompletionSetting {
-  pub temperature: f64,
-  pub top_p: Option<f64>,
-  pub seed: u64,
-  pub repeat_penalty: f32,
-  pub repeat_last_n: usize,
-  pub sample_len: usize,
-  pub prompt: Option<String>,
-  pub one_shot: bool,
-}

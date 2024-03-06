@@ -52,3 +52,4 @@ futures = "0.3.30"
 uuid = { version = "1.7.0", features = ["v4"] }
 tinyvec = { version = "1.6.0", features = ["serde"] }
 pin-project = "1.1.4"
+bindgen_cuda = "0.1.1"

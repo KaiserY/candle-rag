@@ -1,13 +1,11 @@
 use candle_core::quantized::{ggml_file, gguf_file};
+use candle_core::utils::cuda_is_available;
 use candle_core::{Device, Tensor};
 use candle_examples::token_output_stream::TokenOutputStream;
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::quantized_llama as model;
+use candle_transformers::models::quantized_llama::ModelWeights;
 use futures::Stream;
-#[allow(unused_imports)]
-use futures::StreamExt;
-use model::ModelWeights;
-use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::path::PathBuf;
 use std::pin::Pin;
@@ -15,41 +13,56 @@ use std::sync::OnceLock;
 use std::task::{Context, Poll};
 use tokenizers::Tokenizer;
 
-use crate::model::{ChatCompletionSetting, ModelId};
-use crate::stopping_stream::StoppingStream;
+use crate::types::conf::ChatCompletionSetting;
+use crate::types::model::ModelId;
+use crate::util::format_size;
 
 const DEFAULT_PROMPT: &str = "My favorite theorem is ";
 
-pub static LLAMA_CPP_MODEL: OnceLock<LlamaCppModel> = OnceLock::new();
+pub static MODEL: OnceLock<Model> = OnceLock::new();
 
-#[derive(Debug, Clone, Default, Deserialize, Serialize)]
-pub struct LlamaCppModelConf {
+#[derive(Debug, Clone)]
+enum Prompt {
+  Interactive,
+  Chat,
+  One(String),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Config {
   pub model_id: ModelId,
   pub model_path: String,
   pub tokenizer_path: String,
+  pub device: String,
 }
 
 #[derive(Debug, Clone)]
-pub struct LlamaCppModel {
-  pub config: LlamaCppModelConf,
+pub struct Model {
+  pub model_id: ModelId,
+  pub model_path: String,
+  pub tokenizer_path: String,
+  pub device: Device,
   model_weights: ModelWeights,
   tokenizer: Tokenizer,
 }
 
-impl LlamaCppModel {
-  pub fn load_model(config: LlamaCppModelConf) -> anyhow::Result<LlamaCppModel> {
-    tracing::info!(
-      "avx: {}, neon: {}, simd128: {}, f16c: {}",
-      candle_core::utils::with_avx(),
-      candle_core::utils::with_neon(),
-      candle_core::utils::with_simd128(),
-      candle_core::utils::with_f16c()
-    );
+impl Model {
+  pub fn new(cfg: &Config) -> anyhow::Result<Self> {
+    let device = match cfg.device.as_str() {
+      "cpu" => Device::Cpu,
+      "cuda" => {
+        if cuda_is_available() {
+          Device::new_cuda(0)?
+        } else {
+          Device::Cpu
+        }
+      }
+      _ => Device::Cpu,
+    };
 
-    let model_path = PathBuf::from(&config.model_path);
-    let mut model_file = std::fs::File::open(&config.model_path)?;
+    let model_path = PathBuf::from(&cfg.model_path);
+    let mut model_file = std::fs::File::open(&cfg.model_path)?;
     let start = std::time::Instant::now();
-    let device = candle_examples::device(true)?;
 
     let model_weights = match model_path.extension().and_then(|v| v.to_str()) {
       Some("gguf") => {
@@ -90,7 +103,7 @@ impl LlamaCppModel {
 
         tracing::info!("params: {:?}", model.hparams);
 
-        let default_gqa = match &config.model_id {
+        let default_gqa = match &cfg.model_id {
           ModelId::Zephyr7bAlpha | ModelId::Zephyr7bBeta => 8,
           _ => 1,
         };
@@ -101,42 +114,42 @@ impl LlamaCppModel {
     tracing::info!("model built");
 
     let tokenizer =
-      Tokenizer::from_file(PathBuf::from(&config.tokenizer_path)).map_err(anyhow::Error::msg)?;
+      Tokenizer::from_file(PathBuf::from(&cfg.tokenizer_path)).map_err(anyhow::Error::msg)?;
 
-    Ok(LlamaCppModel {
-      config,
+    Ok(Self {
+      model_id: cfg.model_id,
+      model_path: cfg.model_path.clone(),
+      tokenizer_path: cfg.tokenizer_path.clone(),
+      device,
       model_weights,
       tokenizer,
     })
   }
 }
 
-pub struct LlamaCppModelPipeline {
-  pub model: LlamaCppModel,
-  prompt: Prompt,
-  device: Device,
+pub struct TextGeneration {
+  pub model: Model,
   token_output_stream: TokenOutputStream,
-  pre_prompt_tokens: Vec<u32>,
-  to_sample: usize,
-  all_tokens: Vec<u32>,
-  eos_token: u32,
   logits_processor: LogitsProcessor,
+  prompt: Prompt,
+  sample_len: usize,
   repeat_penalty: f32,
   repeat_last_n: usize,
+  all_tokens: Vec<u32>,
+  eos_token: u32,
 }
 
-impl LlamaCppModelPipeline {
-  pub fn init_pipeline(
-    model: LlamaCppModel,
-    setting: ChatCompletionSetting,
-  ) -> anyhow::Result<Self> {
+impl TextGeneration {
+  pub fn new(model: Model, setting: ChatCompletionSetting) -> anyhow::Result<Self> {
     let temperature = if setting.temperature == 0. {
       None
     } else {
       Some(setting.temperature)
     };
 
-    let device = candle_examples::device(true)?;
+    let token_output_stream = TokenOutputStream::new(model.tokenizer.clone());
+
+    let logits_processor = LogitsProcessor::new(setting.seed, temperature, setting.top_p);
 
     let prompt = match setting.prompt.as_deref() {
       Some("chat") => Prompt::Chat,
@@ -145,11 +158,7 @@ impl LlamaCppModelPipeline {
       None => Prompt::One(DEFAULT_PROMPT.to_string()),
     };
 
-    let token_output_stream = TokenOutputStream::new(model.tokenizer.clone());
-
-    let logits_processor = LogitsProcessor::new(setting.seed, temperature, setting.top_p);
-
-    let eos_token = if model.config.model_id.is_open_chat() {
+    let eos_token = if model.model_id.is_open_chat() {
       "<|end_of_turn|>"
     } else {
       "</s>"
@@ -161,22 +170,22 @@ impl LlamaCppModelPipeline {
       .get(eos_token)
       .unwrap();
 
-    Ok(LlamaCppModelPipeline {
+    Ok(Self {
       model,
-      device,
-      prompt,
       token_output_stream,
-      pre_prompt_tokens: vec![],
-      to_sample: setting.sample_len.saturating_sub(1),
-      all_tokens: vec![],
-      eos_token: eos_token,
       logits_processor,
+      prompt,
+      sample_len: setting.sample_len,
       repeat_penalty: setting.repeat_penalty,
       repeat_last_n: setting.repeat_last_n,
+      all_tokens: vec![],
+      eos_token,
     })
   }
 
-  pub fn run_cli(&mut self) -> anyhow::Result<()> {
+  pub fn run(&mut self) -> anyhow::Result<()> {
+    let mut pre_prompt_tokens = vec![];
+
     for prompt_index in 0.. {
       let prompt_str = match &self.prompt {
         Prompt::One(prompt) => prompt.clone(),
@@ -192,15 +201,15 @@ impl LlamaCppModelPipeline {
               prompt.pop();
             }
           }
-          if self.model.config.model_id.is_open_chat() {
+          if self.model.model_id.is_open_chat() {
             format!("GPT4 Correct User: {prompt}<|end_of_turn|>GPT4 Correct Assistant:")
-          } else if self.model.config.model_id.is_zephyr() {
+          } else if self.model.model_id.is_zephyr() {
             if prompt_index == 0 || is_interactive {
               format!("<|system|>\n</s>\n<|user|>\n{prompt}</s>\n<|assistant|>",)
             } else {
               format!("<|user|>\n{prompt}</s>\n<|assistant|>")
             }
-          } else if self.model.config.model_id.is_mistral() {
+          } else if self.model.model_id.is_mistral() {
             format!("[INST] {prompt} [/INST]")
           } else {
             prompt
@@ -216,25 +225,25 @@ impl LlamaCppModelPipeline {
         .encode(prompt_str, true)
         .map_err(anyhow::Error::msg)?;
 
-      let mut prompt_tokens = [&self.pre_prompt_tokens, tokens.get_ids()].concat();
+      let mut prompt_tokens = [&pre_prompt_tokens, tokens.get_ids()].concat();
 
-      prompt_tokens = if prompt_tokens.len() + self.to_sample > model::MAX_SEQ_LEN - 10 {
-        let to_remove = prompt_tokens.len() + self.to_sample + 10 - model::MAX_SEQ_LEN;
+      prompt_tokens = if prompt_tokens.len() + self.sample_len > model::MAX_SEQ_LEN - 10 {
+        let to_remove = prompt_tokens.len() + self.sample_len + 10 - model::MAX_SEQ_LEN;
         prompt_tokens[prompt_tokens.len().saturating_sub(to_remove)..].to_vec()
       } else {
         prompt_tokens
       };
 
-      let start_prompt_processing = std::time::Instant::now();
-
-      let prompt_dt = start_prompt_processing.elapsed();
-
       self.all_tokens.extend(prompt_tokens.clone());
 
       let start_post_prompt = std::time::Instant::now();
       let mut sampled = 0;
-      for index in 0..self.to_sample {
-        let next_token = self.forward(index)?;
+      for index in 0..self.sample_len {
+        let context_size = if index > 0 { 1 } else { self.all_tokens.len() };
+
+        let start_pos = self.all_tokens.len().saturating_sub(context_size);
+
+        let next_token = self.forward_token(start_pos)?;
 
         self.all_tokens.push(next_token);
 
@@ -254,6 +263,8 @@ impl LlamaCppModelPipeline {
         .decode_rest()
         .map_err(candle_core::Error::msg)?
       {
+        tracing::info!("rest={}", rest);
+
         print!("{rest}");
       }
 
@@ -261,13 +272,7 @@ impl LlamaCppModelPipeline {
       let dt = start_post_prompt.elapsed();
 
       tracing::info!(
-        "\n\n{:4} prompt tokens processed: {:.2} token/s",
-        prompt_tokens.len(),
-        prompt_tokens.len() as f64 / prompt_dt.as_secs_f64(),
-      );
-
-      tracing::info!(
-        "{sampled:4} tokens generated: {:.2} token/s",
+        "\n\n{sampled:4} tokens generated: {:.2} token/s",
         sampled as f64 / dt.as_secs_f64(),
       );
 
@@ -275,7 +280,7 @@ impl LlamaCppModelPipeline {
         Prompt::One(_) => break,
         Prompt::Interactive => {}
         Prompt::Chat => {
-          self.pre_prompt_tokens = [prompt_tokens.as_slice(), self.all_tokens.as_slice()].concat()
+          pre_prompt_tokens = [prompt_tokens.as_slice(), self.all_tokens.as_slice()].concat()
         }
       }
     }
@@ -283,16 +288,12 @@ impl LlamaCppModelPipeline {
     Ok(())
   }
 
-  fn forward(&mut self, index: usize) -> anyhow::Result<u32> {
-    let context_size = if index > 0 { 1 } else { self.all_tokens.len() };
+  fn forward_token(&mut self, index_pos: usize) -> anyhow::Result<u32> {
+    let ctxt = &self.all_tokens[index_pos..];
 
-    let start_pos = self.all_tokens.len().saturating_sub(context_size);
+    let input = Tensor::new(ctxt, &self.model.device)?.unsqueeze(0)?;
 
-    let ctxt = &self.all_tokens[start_pos..];
-
-    let input = Tensor::new(ctxt, &self.device)?.unsqueeze(0)?;
-
-    let logits = self.model.model_weights.forward(&input, start_pos)?;
+    let logits = self.model.model_weights.forward(&input, index_pos)?;
 
     let logits = logits.squeeze(0)?;
 
@@ -311,32 +312,46 @@ impl LlamaCppModelPipeline {
   }
 }
 
-#[derive(Debug, Clone)]
-enum Prompt {
-  Interactive,
-  Chat,
-  One(String),
+#[pin_project::pin_project]
+pub struct TextGenerationStream {
+  pub text_gen: TextGeneration,
+  sampled: usize,
 }
 
-fn format_size(size_in_bytes: usize) -> String {
-  if size_in_bytes < 1_000 {
-    format!("{}B", size_in_bytes)
-  } else if size_in_bytes < 1_000_000 {
-    format!("{:.2}KB", size_in_bytes as f64 / 1e3)
-  } else if size_in_bytes < 1_000_000_000 {
-    format!("{:.2}MB", size_in_bytes as f64 / 1e6)
-  } else {
-    format!("{:.2}GB", size_in_bytes as f64 / 1e9)
+impl TextGenerationStream {
+  pub fn new(mut text_gen: TextGeneration) -> anyhow::Result<Self> {
+    let prompt_str = match &text_gen.prompt {
+      Prompt::One(prompt) => prompt.clone(),
+      _ => "".to_string(),
+    };
+
+    tracing::info!("prompt_str={}", &prompt_str);
+
+    let tokens = text_gen
+      .token_output_stream
+      .tokenizer()
+      .encode(prompt_str, true)
+      .map_err(anyhow::Error::msg)?;
+
+    let mut prompt_tokens = tokens.get_ids().to_owned();
+
+    prompt_tokens = if prompt_tokens.len() + text_gen.sample_len > model::MAX_SEQ_LEN - 10 {
+      let to_remove = prompt_tokens.len() + text_gen.sample_len + 10 - model::MAX_SEQ_LEN;
+      prompt_tokens[prompt_tokens.len().saturating_sub(to_remove)..].to_vec()
+    } else {
+      prompt_tokens
+    };
+
+    text_gen.all_tokens.extend(prompt_tokens.clone());
+
+    Ok(Self {
+      text_gen,
+      sampled: 0,
+    })
   }
 }
 
-#[pin_project::pin_project]
-pub struct LlamaCppChatCompletionStream {
-  pub model: LlamaCppModel,
-  pub setting: ChatCompletionSetting,
-}
-
-impl Stream for LlamaCppChatCompletionStream {
+impl Stream for TextGenerationStream {
   type Item = String;
 
   fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
@@ -348,16 +363,44 @@ impl Stream for LlamaCppChatCompletionStream {
   }
 }
 
-impl Iterator for LlamaCppChatCompletionStream {
+impl Iterator for TextGenerationStream {
   type Item = String;
 
   fn next(&mut self) -> Option<Self::Item> {
-    Some("".to_string())
+    if self.sampled > self.text_gen.sample_len {
+      return None;
+    }
+
+    let context_size = if self.sampled > 0 {
+      1
+    } else {
+      self.text_gen.all_tokens.len()
+    };
+
+    let start_pos = self.text_gen.all_tokens.len().saturating_sub(context_size);
+
+    let next_token = self.text_gen.forward_token(start_pos).ok();
+
+    match next_token {
+      Some(next_token) => {
+        self.text_gen.all_tokens.push(next_token);
+        self.sampled += 1;
+
+        if next_token == self.text_gen.eos_token {
+          None
+        } else if let Ok(Some(t)) = self.text_gen.token_output_stream.next_token(next_token) {
+          Some(t)
+        } else {
+          None
+        }
+      }
+      None => None,
+    }
   }
 }
 
 pub async fn chat_completion_stream(
-  stream: LlamaCppChatCompletionStream,
-) -> Result<StoppingStream<Box<dyn Stream<Item = String> + Unpin + Send>>, anyhow::Error> {
-  Ok(StoppingStream::new(Box::new(Box::pin(Box::new(stream)))))
+  stream: TextGenerationStream,
+) -> Result<Box<dyn Stream<Item = String> + Unpin + Send>, anyhow::Error> {
+  Ok(Box::new(Box::pin(Box::new(stream))))
 }

@@ -10,7 +10,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::trace::TraceLayer;
-use zxrag_core::conf::BackendConf;
+use zxrag_core::types::conf::BackendConf;
 
 use crate::controller::openai_controller;
 
