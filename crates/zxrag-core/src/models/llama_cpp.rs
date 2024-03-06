@@ -15,6 +15,7 @@ use tokenizers::Tokenizer;
 
 use crate::types::conf::ChatCompletionSetting;
 use crate::types::model::ModelId;
+use crate::types::stopping_stream::StoppingStream;
 use crate::util::format_size;
 
 const DEFAULT_PROMPT: &str = "My favorite theorem is ";
@@ -48,6 +49,14 @@ pub struct Model {
 
 impl Model {
   pub fn new(cfg: &Config) -> anyhow::Result<Self> {
+    tracing::info!(
+      "avx: {}, neon: {}, simd128: {}, f16c: {}",
+      candle_core::utils::with_avx(),
+      candle_core::utils::with_neon(),
+      candle_core::utils::with_simd128(),
+      candle_core::utils::with_f16c()
+    );
+
     let device = match cfg.device.as_str() {
       "cpu" => Device::Cpu,
       "cuda" => {
@@ -312,7 +321,6 @@ impl TextGeneration {
   }
 }
 
-#[pin_project::pin_project]
 pub struct TextGenerationStream {
   pub text_gen: TextGeneration,
   sampled: usize,
@@ -354,21 +362,11 @@ impl TextGenerationStream {
 impl Stream for TextGenerationStream {
   type Item = String;
 
-  fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-    match std::pin::pin!(&mut self).poll_next(cx) {
-      Poll::Ready(Some(val)) => Poll::Ready(Some(val)),
-      Poll::Ready(None) => Poll::Ready(None),
-      Poll::Pending => Poll::Pending,
-    }
-  }
-}
+  fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+    tracing::info!("sampled={}", self.sampled);
 
-impl Iterator for TextGenerationStream {
-  type Item = String;
-
-  fn next(&mut self) -> Option<Self::Item> {
     if self.sampled > self.text_gen.sample_len {
-      return None;
+      return Poll::Ready(None);
     }
 
     let context_size = if self.sampled > 0 {
@@ -387,22 +385,36 @@ impl Iterator for TextGenerationStream {
         self.sampled += 1;
 
         if next_token == self.text_gen.eos_token {
-          None
-        } else if let Ok(Some(t)) = self.text_gen.token_output_stream.next_token(next_token) {
-          tracing::info!("t={}", t);
+          Poll::Ready(None)
+        } else if let Ok(t) = self.text_gen.token_output_stream.next_token(next_token) {
+          tracing::info!("t={:?}", t);
 
-          Some(t)
+          if let Some(t) = t {
+            Poll::Ready(Some(t))
+          } else {
+            Poll::Ready(Some("".to_string()))
+          }
         } else {
-          None
+          Poll::Ready(None)
         }
       }
-      None => None,
+      None => Poll::Ready(None),
     }
   }
 }
 
 pub async fn chat_completion_stream(
   stream: TextGenerationStream,
-) -> Result<Box<dyn Stream<Item = String> + Unpin + Send>, anyhow::Error> {
-  Ok(Box::new(Box::pin(Box::new(stream))))
+) -> Result<StoppingStream<Box<dyn Stream<Item = String> + Unpin + Send>>, anyhow::Error> {
+  let pinned = Box::pin(Box::new(stream));
+
+  Ok(StoppingStream::wrap_with_stop_words(
+    Box::new(pinned),
+    vec![
+      "<|ASSISTANT|>".to_string(),
+      "<|USER|>".to_string(),
+      "<|TOOL|>".to_string(),
+      "<|SYSTEM|>".to_string(),
+    ],
+  ))
 }
