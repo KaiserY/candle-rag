@@ -1,6 +1,6 @@
 use axum::{
   body::Body,
-  http::{header, StatusCode, Uri},
+  http::{header, Method, StatusCode, Uri},
   response::{IntoResponse, Response},
   routing::{get, post},
   Router,
@@ -9,6 +9,7 @@ use rust_embed::RustEmbed;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tower_http::catch_panic::CatchPanicLayer;
+use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use zxrag_core::types::conf::BackendConf;
 
@@ -35,8 +36,13 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     config: Arc::new(config),
   };
 
+  let cors = CorsLayer::new()
+    .allow_methods([Method::GET, Method::POST])
+    .allow_headers(Any)
+    .allow_origin(Any);
+
   let v1_routes = Router::new().route(
-    "chat/completions",
+    "/chat/completions",
     post(openai_controller::chat_completions),
   );
 
@@ -45,6 +51,7 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     .route("/*file", get(static_handler))
     .layer(CatchPanicLayer::new())
     .layer(TraceLayer::new_for_http())
+    .layer(cors)
     .with_state(shared_state);
 
   tracing::info!("listening on {}", addr);

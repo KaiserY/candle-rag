@@ -63,6 +63,15 @@ fn main() -> Result<(), anyhow::Error> {
         )
         .init();
 
+      let model_config = Config {
+        model_id: config.model_id.clone(),
+        model_path: config.model_path.clone(),
+        tokenizer_path: config.tokenizer_path.clone(),
+        device: config.device.clone(),
+      };
+
+      MODEL.get_or_init(|| Model::new(&model_config).expect("init model failed"));
+
       run_backend(config)?;
     }
     Commands::Cli(cli_config) => {

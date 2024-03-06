@@ -389,6 +389,8 @@ impl Iterator for TextGenerationStream {
         if next_token == self.text_gen.eos_token {
           None
         } else if let Ok(Some(t)) = self.text_gen.token_output_stream.next_token(next_token) {
+          tracing::info!("t={}", t);
+
           Some(t)
         } else {
           None

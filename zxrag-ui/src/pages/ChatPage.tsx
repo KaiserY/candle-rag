@@ -1,6 +1,26 @@
+import OpenAI from 'openai';
+
 import { Navbar } from "../components/navbar";
 
 export function ChatPage() {
+	let openai = new OpenAI({
+		baseURL: 'http://127.0.0.1:3000/v1',
+		apiKey: "NULL",
+		dangerouslyAllowBrowser: true,
+	});
+
+	const handleClick = async () => {
+		const stream = await openai.chat.completions.create({
+			model: 'gpt-4',
+			messages: [{ role: 'user', content: 'Say this is a test' }],
+			stream: true,
+		});
+
+		for await (const chunk of stream) {
+			console.log(chunk.choices[0]?.delta?.content || '');
+		}
+	};
+
 	return (
 		<>
 			<div className="flex h-full flex-col py-6">
@@ -16,7 +36,7 @@ export function ChatPage() {
 							<div className="basis-1/2 rounded-md border px-4 py-2">Bio</div>
 						</div>
 						<div className="flex items-center">
-							<button type="button" className="btn btn-neutral">
+							<button type="button" className="btn btn-neutral" onClick={handleClick}>
 								Submit
 							</button>
 						</div>

@@ -21,19 +21,19 @@ pub async fn chat_completions(
 ) -> Result<impl IntoResponse, BackendError> {
   let untokenized_context = format!("{}<|ASSISTANT|>", req.messages);
 
-  let mut args = CompletionArgs {
-    prompt: untokenized_context,
-    seed: req.seed,
-    ..Default::default()
-  };
+  // let mut args = CompletionArgs {
+  //   prompt: untokenized_context,
+  //   seed: req.seed,
+  //   ..Default::default()
+  // };
 
-  if let Some(one_shot) = req.one_shot {
-    args.one_shot = one_shot;
-  }
+  // if let Some(one_shot) = req.one_shot {
+  //   args.one_shot = one_shot;
+  // }
 
-  if let Some(frequency_penalty) = req.frequency_penalty {
-    args.frequency_penalty = frequency_penalty;
-  }
+  // if let Some(frequency_penalty) = req.frequency_penalty {
+  //   args.frequency_penalty = frequency_penalty;
+  // }
 
   let fp = format!("zxrag-{}", "0.1.0");
 
@@ -46,7 +46,7 @@ pub async fn chat_completions(
     repeat_penalty: 1.1,
     repeat_last_n: 64,
     sample_len: 128,
-    prompt: None,
+    prompt: Some(untokenized_context),
   };
 
   let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?;
