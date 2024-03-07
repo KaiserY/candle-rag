@@ -25,7 +25,7 @@ struct Dist;
 
 #[derive(Clone)]
 pub struct BackendState {
-  config: Arc<BackendConf>,
+  _config: Arc<BackendConf>,
 }
 
 #[tokio::main]
@@ -33,7 +33,7 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
   let addr: SocketAddr = config.bind_addr.parse()?;
 
   let shared_state = BackendState {
-    config: Arc::new(config),
+    _config: Arc::new(config),
   };
 
   let cors = CorsLayer::new()

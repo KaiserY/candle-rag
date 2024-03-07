@@ -10,7 +10,7 @@ use time::OffsetDateTime;
 use tinyvec::{tiny_vec, TinyVec};
 use uuid::Uuid;
 use zxrag_core::models::llama_cpp::{
-  chat_completion_stream, TextGeneration, TextGenerationStream, MODEL,
+  chat_completion, chat_completion_stream, TextGeneration, TextGenerationStream, MODEL,
 };
 use zxrag_core::types::conf::ChatCompletionSetting;
 
@@ -21,55 +21,73 @@ pub async fn chat_completions(
 ) -> Result<impl IntoResponse, BackendError> {
   let untokenized_context = format!("{}<|ASSISTANT|>", req.messages);
 
-  // let mut args = CompletionArgs {
-  //   prompt: untokenized_context,
-  //   seed: req.seed,
-  //   ..Default::default()
-  // };
-
-  // if let Some(one_shot) = req.one_shot {
-  //   args.one_shot = one_shot;
-  // }
-
-  // if let Some(frequency_penalty) = req.frequency_penalty {
-  //   args.frequency_penalty = frequency_penalty;
-  // }
-
   let fp = format!("zxrag-{}", "0.1.0");
 
   let model = (*MODEL.get().expect("")).clone();
 
   let setting = ChatCompletionSetting {
-    temperature: 0.8,
-    top_p: None,
-    seed: 299792458,
-    repeat_penalty: 1.1,
+    temperature: req.temperature.unwrap_or(0.8),
+    top_p: req.top_p,
+    seed: req.seed.unwrap_or(299792458),
+    repeat_penalty: req.frequency_penalty.unwrap_or(1.1),
     repeat_last_n: 64,
-    sample_len: 128,
+    sample_len: req
+      .max_tokens
+      .map_or(128, |value| value.try_into().unwrap_or(128)),
     prompt: Some(untokenized_context),
   };
 
-  let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?;
+  let stream_response = req.stream.unwrap_or(false);
 
-  let completions_stream = chat_completion_stream(stream).await?.map(move |chunk| {
-    Event::default().json_data(ChatCompletionChunk {
+  let response = if stream_response {
+    let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?;
+
+    let completions_stream = chat_completion_stream(stream).await?.map(move |chunk| {
+      Event::default().json_data(ChatCompletionChunk {
+        id: Uuid::new_v4().to_string().into(),
+        choices: tiny_vec![ChatCompletionChunkChoice {
+          index: 0,
+          finish_reason: None,
+          delta: ChatCompletionChunkDelta {
+            content: Some(Cow::Owned(chunk)),
+            role: None,
+          },
+        }],
+        created: OffsetDateTime::now_utc().unix_timestamp(),
+        model: Cow::Borrowed("main"),
+        system_fingerprint: Cow::Borrowed(&fp),
+        object: Cow::Borrowed("text_completion"),
+      })
+    });
+
+    ChatCompletionResponse::Stream(Sse::new(completions_stream))
+  } else {
+    let content_str = chat_completion(TextGeneration::new(model, setting)?).await?;
+
+    let response = ChatCompletion {
       id: Uuid::new_v4().to_string().into(),
-      choices: tiny_vec![ChatCompletionChunkChoice {
-        index: 0,
-        finish_reason: None,
-        delta: ChatCompletionChunkDelta {
-          content: Some(Cow::Owned(chunk)),
-          role: None,
+      choices: vec![ChatCompletionChoice {
+        message: ChatMessage::Assistant {
+          content: Some(Cow::Owned(content_str)),
+          name: None,
+          tool_calls: None,
         },
+        finish_reason: None,
+        index: 0,
       }],
       created: OffsetDateTime::now_utc().unix_timestamp(),
       model: Cow::Borrowed("main"),
-      system_fingerprint: Cow::Borrowed(&fp),
       object: Cow::Borrowed("text_completion"),
-    })
-  });
+      system_fingerprint: Cow::Owned(fp),
+      usage: ChatCompletionUsage {
+        completion_tokens: 0,
+        prompt_tokens: 0,
+        total_tokens: 0,
+      },
+    };
 
-  let response = ChatCompletionResponse::Stream(Sse::new(completions_stream));
+    ChatCompletionResponse::Full(Json(response))
+  };
 
   Ok(response)
 }
@@ -78,8 +96,8 @@ pub async fn chat_completions(
 pub struct CompletionArgs {
   pub prompt: String,
   pub one_shot: bool,
-  pub seed: Option<u32>,
-  pub frequency_penalty: f32,
+  pub seed: Option<u64>,
+  pub frequency_penalty: f64,
 }
 
 impl Default for CompletionArgs {
@@ -99,17 +117,17 @@ pub struct ChatCompletionRequest<'a> {
   pub messages: ChatMessages<'a>,
   pub model: Cow<'a, str>,
   pub frequency_penalty: Option<f32>,
-  pub logit_bias: Option<HashMap<u32, f32>>,
-  pub max_tokens: Option<u32>,
-  pub n: Option<f32>,
-  pub presence_penalty: Option<f32>,
-  pub seed: Option<u32>,
+  pub logit_bias: Option<HashMap<u64, f64>>,
+  pub max_tokens: Option<u64>,
+  pub n: Option<f64>,
+  pub presence_penalty: Option<f64>,
+  pub seed: Option<u64>,
   #[serde(default, with = "either::serde_untagged_optional")]
   pub stop: Option<Either<Cow<'a, str>, Vec<Cow<'a, str>>>>,
   pub stream: Option<bool>,
   pub response_format: Option<serde_json::Value>,
-  pub temperature: Option<f32>,
-  pub top_p: Option<f32>,
+  pub temperature: Option<f64>,
+  pub top_p: Option<f64>,
   pub tools: Option<Vec<ToolStub<'a>>>,
   #[serde(default, with = "either::serde_untagged_optional")]
   pub tool_choice: Option<Either<Cow<'a, str>, ToolStub<'a>>>,
@@ -296,9 +314,9 @@ pub struct ChatCompletionChoice<'a> {
 
 #[derive(Serialize, Deserialize)]
 pub struct ChatCompletionUsage {
-  pub completion_tokens: u32,
-  pub prompt_tokens: u32,
-  pub total_tokens: u32,
+  pub completion_tokens: u64,
+  pub prompt_tokens: u64,
+  pub total_tokens: u64,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -315,7 +333,7 @@ pub struct ChatCompletionChunk<'a> {
 pub struct ChatCompletionChunkChoice<'a> {
   pub delta: ChatCompletionChunkDelta<'a>,
   pub finish_reason: Option<Cow<'a, str>>,
-  pub index: u32,
+  pub index: u64,
 }
 
 #[derive(Serialize, Deserialize, Default)]

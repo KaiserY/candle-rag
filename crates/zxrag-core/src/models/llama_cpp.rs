@@ -257,6 +257,8 @@ impl TextGeneration {
         self.all_tokens.push(next_token);
 
         if let Some(t) = self.token_output_stream.next_token(next_token)? {
+          tracing::info!("t={}", t);
+
           print!("{t}");
           std::io::stdout().flush()?;
         }
@@ -295,6 +297,65 @@ impl TextGeneration {
     }
 
     Ok(())
+  }
+
+  pub fn generate(&mut self) -> anyhow::Result<String> {
+    let prompt_str = match &self.prompt {
+      Prompt::One(prompt) => prompt.clone(),
+      _ => "".to_string(),
+    };
+
+    tracing::info!("prompt_str={}", &prompt_str);
+
+    let tokens = self
+      .token_output_stream
+      .tokenizer()
+      .encode(prompt_str, true)
+      .map_err(anyhow::Error::msg)?;
+
+    let mut prompt_tokens = tokens.get_ids().to_owned();
+
+    prompt_tokens = if prompt_tokens.len() + self.sample_len > model::MAX_SEQ_LEN - 10 {
+      let to_remove = prompt_tokens.len() + self.sample_len + 10 - model::MAX_SEQ_LEN;
+      prompt_tokens[prompt_tokens.len().saturating_sub(to_remove)..].to_vec()
+    } else {
+      prompt_tokens
+    };
+
+    self.all_tokens.extend(prompt_tokens.clone());
+
+    let mut output = String::new();
+
+    for index in 0..self.sample_len {
+      let context_size = if index > 0 { 1 } else { self.all_tokens.len() };
+
+      let start_pos = self.all_tokens.len().saturating_sub(context_size);
+
+      let next_token = self.forward_token(start_pos)?;
+
+      self.all_tokens.push(next_token);
+
+      if let Some(t) = self.token_output_stream.next_token(next_token)? {
+        tracing::info!("t={}", t);
+
+        output.push_str(&t);
+      }
+
+      if next_token == self.eos_token {
+        break;
+      };
+    }
+    if let Some(rest) = self
+      .token_output_stream
+      .decode_rest()
+      .map_err(candle_core::Error::msg)?
+    {
+      tracing::info!("rest={}", rest);
+
+      output.push_str(&rest);
+    }
+
+    Ok(output)
   }
 
   fn forward_token(&mut self, index_pos: usize) -> anyhow::Result<u32> {
@@ -403,9 +464,13 @@ impl Stream for TextGenerationStream {
   }
 }
 
+pub async fn chat_completion(mut text_gen: TextGeneration) -> anyhow::Result<String> {
+  text_gen.generate()
+}
+
 pub async fn chat_completion_stream(
   stream: TextGenerationStream,
-) -> Result<StoppingStream<Box<dyn Stream<Item = String> + Unpin + Send>>, anyhow::Error> {
+) -> anyhow::Result<StoppingStream<Box<dyn Stream<Item = String> + Unpin + Send>>> {
   let pinned = Box::pin(Box::new(stream));
 
   Ok(StoppingStream::wrap_with_stop_words(
