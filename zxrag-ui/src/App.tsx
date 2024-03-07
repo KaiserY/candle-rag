@@ -17,7 +17,8 @@ export default function App() {
 	const router = createBrowserRouter(
 		createRoutesFromElements(
 			<Route path="/" element={<LayoutPage />}>
-				<Route index path="chat" element={<ChatPage />} />
+				<Route index element={<ChatPage />} />
+				<Route path="chat" element={<ChatPage />} />
 				<Route path="kbqa" element={<ChatPage />} />
 				<Route path="ocr" element={<ChatPage />} />
 				<Route path="*" element={<NoMatch />} />

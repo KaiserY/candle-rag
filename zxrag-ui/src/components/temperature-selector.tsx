@@ -12,14 +12,14 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 
 interface TemperatureSelectorProps {
-	defaultValue: SliderProps["defaultValue"];
+	temperature: SliderProps["defaultValue"];
+	setTemperature: React.Dispatch<React.SetStateAction<number[] | undefined>>;
 }
 
 export function TemperatureSelector({
-	defaultValue,
+	temperature,
+	setTemperature,
 }: TemperatureSelectorProps) {
-	const [value, setValue] = React.useState(defaultValue);
-
 	return (
 		<div className="grid gap-2 pt-2">
 			<HoverCard openDelay={200}>
@@ -28,15 +28,15 @@ export function TemperatureSelector({
 						<div className="flex items-center justify-between">
 							<Label htmlFor="temperature">Temperature</Label>
 							<span className="w-12 rounded-md border border-transparent px-2 py-0.5 text-right text-sm text-muted-foreground hover:border-border">
-								{value}
+								{temperature}
 							</span>
 						</div>
 						<Slider
 							id="temperature"
 							max={1}
-							defaultValue={value}
+							defaultValue={temperature}
 							step={0.1}
-							onValueChange={setValue}
+							onValueChange={setTemperature}
 							className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
 							aria-label="Temperature"
 						/>

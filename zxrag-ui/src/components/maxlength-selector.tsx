@@ -12,12 +12,14 @@ import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 
 interface MaxLengthSelectorProps {
-	defaultValue: SliderProps["defaultValue"];
+	maxLength: SliderProps["defaultValue"];
+	setMaxLength: React.Dispatch<React.SetStateAction<number[] | undefined>>;
 }
 
-export function MaxLengthSelector({ defaultValue }: MaxLengthSelectorProps) {
-	const [value, setValue] = React.useState(defaultValue);
-
+export function MaxLengthSelector({
+	maxLength,
+	setMaxLength,
+}: MaxLengthSelectorProps) {
 	return (
 		<div className="grid gap-2 pt-2">
 			<HoverCard openDelay={200}>
@@ -26,15 +28,15 @@ export function MaxLengthSelector({ defaultValue }: MaxLengthSelectorProps) {
 						<div className="flex items-center justify-between">
 							<Label htmlFor="maxlength">Maximum Length</Label>
 							<span className="w-12 rounded-md border border-transparent px-2 py-0.5 text-right text-sm text-muted-foreground hover:border-border">
-								{value}
+								{maxLength}
 							</span>
 						</div>
 						<Slider
 							id="maxlength"
 							max={4000}
-							defaultValue={value}
+							defaultValue={maxLength}
 							step={10}
-							onValueChange={setValue}
+							onValueChange={setMaxLength}
 							className="[&_[role=slider]]:h-4 [&_[role=slider]]:w-4"
 							aria-label="Maximum Length"
 						/>

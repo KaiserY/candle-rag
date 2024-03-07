@@ -18,7 +18,9 @@ export function MainNav({
 			<Link
 				to="/chat"
 				className={`text-lg font-medium transition-colors px-4 rounded-full hover:text-primary ${
-					location.pathname === "/chat" ? " bg-muted" : "text-muted-foreground"
+					location.pathname === "/chat" || location.pathname === "/"
+						? " bg-muted"
+						: "text-muted-foreground"
 				}`}
 			>
 				Chat
