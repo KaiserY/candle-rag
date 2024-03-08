@@ -8,15 +8,7 @@ import { TopPSelector } from "@/components/top-p-selector";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
-import {
-	Card,
-	CardContent,
-	CardDescription,
-	CardFooter,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface ChatMessage {
 	role: string;
@@ -42,9 +34,35 @@ export function ChatPage() {
 	};
 
 	const handleClick = async () => {
+		if (userPrompt === "") {
+			return;
+		}
+
+		if (output !== "") {
+			setChatMessages((chatMessages) => [
+				...chatMessages,
+				{ role: "assistant", content: output },
+			]);
+
+			setOutput("");
+		}
+
+		setChatMessages((chatMessages) => [
+			...chatMessages,
+			{ role: "user", content: userPrompt },
+		]);
+
 		const stream = await openai.chat.completions.create({
 			model: "gpt-4",
-			messages: [{ role: "user", content: userPrompt }],
+			messages: chatMessages
+				.filter((chat) => chat.role === "user" || chat.role === "assistant")
+				.map((chat) => {
+					if (chat.role === "user") {
+						return { role: "user", content: chat.content };
+					}
+
+					return { role: "assistant", content: chat.content };
+				}),
 			stream: true,
 			max_tokens: maxLength === undefined ? undefined : maxLength[0],
 			top_p: topP === undefined ? undefined : topP[0],
@@ -54,10 +72,10 @@ export function ChatPage() {
 		for await (const chunk of stream) {
 			const newContent = chunk.choices[0]?.delta?.content || "";
 
-			console.log(newContent);
-
 			setOutput((prev) => prev + newContent);
 		}
+
+		setUserPrompt("");
 	};
 
 	return (
@@ -83,24 +101,52 @@ export function ChatPage() {
 								</div>
 							</div>
 							<div className="mt-[21px] basis-2/3">
-								<div className="flex gap-3 w-full p-2">
-									<Avatar className="h-6 w-6">
-										<AvatarFallback>Y</AvatarFallback>
-									</Avatar>
-									<div className="flex flex-col">
-										<span className="font-bold">You</span>
-										<span>AIfasfjoasejfoisajfoasie</span>
+								{chatMessages.map((chat) => {
+									if (chat.role === "user") {
+										return (
+											<div className="flex gap-3 w-full p-2">
+												<Avatar className="h-6 w-6">
+													<AvatarFallback>Y</AvatarFallback>
+												</Avatar>
+												<div className="flex flex-col">
+													<span className="font-bold">You</span>
+													<span>{chat.content}</span>
+												</div>
+											</div>
+										);
+									}
+
+									if (chat.role === "assistant") {
+										return (
+											<div className="flex gap-3 w-full p-2">
+												<Avatar className="h-6 w-6">
+													<AvatarFallback className="bg-red-500 text-white">
+														AI
+													</AvatarFallback>
+												</Avatar>
+												<div className="flex flex-col">
+													<span className="font-bold">AI</span>
+													<span>{chat.content}</span>
+												</div>
+											</div>
+										);
+									}
+
+									return null;
+								})}
+								{output !== "" && (
+									<div className="flex gap-3 w-full p-2">
+										<Avatar className="h-6 w-6">
+											<AvatarFallback className="bg-red-500 text-white">
+												AI
+											</AvatarFallback>
+										</Avatar>
+										<div className="flex flex-col">
+											<span className="font-bold">AI</span>
+											<span>{output}</span>
+										</div>
 									</div>
-								</div>
-                <div className="flex gap-3 w-full p-2">
-									<Avatar className="h-6 w-6">
-										<AvatarFallback className="bg-red-500">AI</AvatarFallback>
-									</Avatar>
-									<div className="flex flex-col">
-										<span className="font-bold">You</span>
-										<span>AIfasfjoasejfoisajfoasie</span>
-									</div>
-								</div>
+								)}
 							</div>
 						</div>
 						<div className="flex items-center space-x-2">
