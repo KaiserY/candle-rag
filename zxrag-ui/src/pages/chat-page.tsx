@@ -8,6 +8,20 @@ import { TopPSelector } from "@/components/top-p-selector";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
+import {
+	Card,
+	CardContent,
+	CardDescription,
+	CardFooter,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+
+interface ChatMessage {
+	role: string;
+	content: string;
+}
 
 export function ChatPage() {
 	const [temperature, setTemperature] = useState<number[] | undefined>([0.6]);
@@ -15,6 +29,7 @@ export function ChatPage() {
 	const [maxLength, setMaxLength] = useState<number[] | undefined>([128]);
 	const [userPrompt, setUserPrompt] = useState("");
 	const [output, setOutput] = useState("");
+	const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 
 	const openai = new OpenAI({
 		baseURL: `${window.location.protocol}//${window.location.host}/v1`,
@@ -50,8 +65,8 @@ export function ChatPage() {
 			<div className="container h-full py-6">
 				<div className="grid h-full items-stretch gap-6 md:grid-cols-[1fr_200px]">
 					<div className="flex flex-col space-y-4">
-						<div className="grid h-full gap-6 lg:grid-cols-2">
-							<div className="flex flex-col space-y-4">
+						<div className="flex flex-row gap-6 h-full lg:grid-cols-2">
+							<div className="flex flex-col basis-1/3 space-y-4">
 								<div className="flex flex-1 flex-col space-y-2">
 									<Label htmlFor="input">Input</Label>
 									<Textarea
@@ -67,8 +82,25 @@ export function ChatPage() {
 									<Textarea id="instructions" placeholder="Fix the grammar." />
 								</div>
 							</div>
-							<div className="mt-[21px] rounded-md border bg-muted">
-								{output}
+							<div className="mt-[21px] basis-2/3">
+								<div className="flex gap-3 w-full p-2">
+									<Avatar className="h-6 w-6">
+										<AvatarFallback>Y</AvatarFallback>
+									</Avatar>
+									<div className="flex flex-col">
+										<span className="font-bold">You</span>
+										<span>AIfasfjoasejfoisajfoasie</span>
+									</div>
+								</div>
+                <div className="flex gap-3 w-full p-2">
+									<Avatar className="h-6 w-6">
+										<AvatarFallback className="bg-red-500">AI</AvatarFallback>
+									</Avatar>
+									<div className="flex flex-col">
+										<span className="font-bold">You</span>
+										<span>AIfasfjoasejfoisajfoasie</span>
+									</div>
+								</div>
 							</div>
 						</div>
 						<div className="flex items-center space-x-2">
