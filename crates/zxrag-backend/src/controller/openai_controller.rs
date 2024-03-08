@@ -1,29 +1,31 @@
 use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
 use derive_more::{Deref, DerefMut, From};
 use either::Either;
-use futures::{Stream, StreamExt, TryStream};
+use futures::{Stream, TryStream};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
+use std::fmt::Write;
 use std::fmt::{Display, Formatter};
+use std::time::Duration;
 use time::OffsetDateTime;
 use tinyvec::{tiny_vec, TinyVec};
+use tokio_stream::StreamExt;
 use uuid::Uuid;
-use zxrag_core::models::llama_cpp::{
-  chat_completion, chat_completion_stream, TextGeneration, TextGenerationStream, MODEL,
-};
+use zxrag_core::models::llama_cpp::{TextGeneration, TextGenerationStream, MODEL};
 use zxrag_core::types::conf::ChatCompletionSetting;
+use zxrag_core::types::model::ModelId;
 
 use crate::error::BackendError;
 
 pub async fn chat_completions(
   Json(req): Json<ChatCompletionRequest<'_>>,
 ) -> Result<impl IntoResponse, BackendError> {
-  let untokenized_context = format!("{}<|ASSISTANT|>", req.messages);
+  let fp = format!("zxrag-{}", env!("CARGO_PKG_VERSION"));
 
-  let fp = format!("zxrag-{}", "0.1.0");
+  let model = (*MODEL.get().ok_or(anyhow::anyhow!("model get error"))?).clone();
 
-  let model = (*MODEL.get().expect("")).clone();
+  let untokenized_context = req.messages.to_prompt(model.model_id)?;
 
   let setting = ChatCompletionSetting {
     temperature: req.temperature.unwrap_or(0.8),
@@ -40,9 +42,10 @@ pub async fn chat_completions(
   let stream_response = req.stream.unwrap_or(false);
 
   let response = if stream_response {
-    let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?;
+    let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?
+      .throttle(Duration::from_millis(100));
 
-    let completions_stream = chat_completion_stream(stream).await?.map(move |chunk| {
+    let completions_stream = stream.map(move |chunk| {
       Event::default().json_data(ChatCompletionChunk {
         id: Uuid::new_v4().to_string().into(),
         choices: tiny_vec![ChatCompletionChunkChoice {
@@ -62,7 +65,7 @@ pub async fn chat_completions(
 
     ChatCompletionResponse::Stream(Sse::new(completions_stream))
   } else {
-    let content_str = chat_completion(TextGeneration::new(model, setting)?).await?;
+    let content_str = TextGeneration::new(model, setting)?.generate()?;
 
     let response = ChatCompletion {
       id: Uuid::new_v4().to_string().into(),
@@ -141,6 +144,91 @@ pub struct ChatMessages<'a>(
   #[deref_mut]
   Vec<ChatMessage<'a>>,
 );
+
+impl<'a> ChatMessages<'a> {
+  fn to_prompt(&self, model_id: ModelId) -> anyhow::Result<String> {
+    let mut prompt = String::new();
+
+    for (i, message) in self.0.iter().enumerate() {
+      match message {
+        ChatMessage::System {
+          content: Some(data),
+          ..
+        } => {
+          if i == 0 {
+            write!(prompt, "<s>")?;
+          }
+
+          if model_id.is_mistral() {
+            write!(
+              prompt,
+              "[INST] {data} Hi [/INST] Hello! how can I help you</s>"
+            )?;
+          } else {
+            write!(prompt, "<|SYSTEM|>{data}")?;
+          }
+        }
+        ChatMessage::User {
+          content: Either::Left(data),
+          ..
+        } => {
+          if i == 0 {
+            write!(prompt, "<s>")?;
+          }
+
+          if model_id.is_mistral() {
+            write!(prompt, "[INST] {data} [/INST]")?;
+          } else {
+            write!(prompt, "<|USER|>{data}")?;
+          }
+        }
+        ChatMessage::User {
+          content: Either::Right(data),
+          ..
+        } => {
+          if i == 0 {
+            write!(prompt, "<s>")?;
+          }
+
+          if model_id.is_mistral() {
+            write!(prompt, "[INST] ")?;
+
+            for part in data {
+              write!(prompt, "{part}")?;
+            }
+
+            write!(prompt, " [/INST]")?;
+          } else {
+            write!(prompt, "<|USER|>")?;
+
+            for part in data {
+              write!(prompt, "{part}")?;
+            }
+          }
+        }
+        ChatMessage::Assistant {
+          content: Some(data),
+          ..
+        } => {
+          if model_id.is_mistral() {
+            write!(prompt, "{data}")?;
+          } else {
+            write!(prompt, "<|ASSISTANT|>{data}")?;
+          }
+        }
+        ChatMessage::Tool {
+          content: Some(data),
+          ..
+        } => {
+          write!(prompt, "<|TOOL|>{data}")?;
+        }
+        _ => {}
+      }
+    }
+
+    Ok(prompt)
+  }
+}
 
 impl<'a> Display for ChatMessages<'a> {
   fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {

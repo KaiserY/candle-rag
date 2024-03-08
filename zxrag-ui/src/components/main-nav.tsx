@@ -8,8 +8,6 @@ export function MainNav({
 }: React.HTMLAttributes<HTMLElement>) {
 	const location = useLocation();
 
-	console.log(location.pathname);
-
 	return (
 		<nav
 			className={cn("flex items-center space-x-4 lg:space-x-6 mx-6", className)}
@@ -26,12 +24,12 @@ export function MainNav({
 				Chat
 			</Link>
 			<Link
-				to="/kbqa"
+				to="/knowledgebase"
 				className={`text-lg font-medium transition-colors px-4 rounded-full hover:text-primary ${
-					location.pathname === "/kbqa" ? " bg-muted" : "text-muted-foreground"
+					location.pathname === "/knowledgebase" ? " bg-muted" : "text-muted-foreground"
 				}`}
 			>
-				KB Q&A
+				Knowledgebase
 			</Link>
 			<Link
 				to="/ocr"

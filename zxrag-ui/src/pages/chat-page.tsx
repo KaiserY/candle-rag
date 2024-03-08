@@ -27,8 +27,6 @@ export function ChatPage() {
 	};
 
 	const handleClick = async () => {
-		console.log(temperature);
-
 		const stream = await openai.chat.completions.create({
 			model: "gpt-4",
 			messages: [{ role: "user", content: userPrompt }],

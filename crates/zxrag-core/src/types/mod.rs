@@ -1,3 +1,3 @@
 pub mod conf;
 pub mod model;
-pub mod stopping_stream;
+pub mod token_output_stream;

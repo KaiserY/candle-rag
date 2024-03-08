@@ -1,7 +1,6 @@
 use candle_core::quantized::{ggml_file, gguf_file};
 use candle_core::utils::cuda_is_available;
 use candle_core::{Device, Tensor};
-use candle_examples::token_output_stream::TokenOutputStream;
 use candle_transformers::generation::LogitsProcessor;
 use candle_transformers::models::quantized_llama as model;
 use candle_transformers::models::quantized_llama::ModelWeights;
@@ -15,7 +14,7 @@ use tokenizers::Tokenizer;
 
 use crate::types::conf::ChatCompletionSetting;
 use crate::types::model::ModelId;
-use crate::types::stopping_stream::StoppingStream;
+use crate::types::token_output_stream::TokenOutputStream;
 use crate::util::format_size;
 
 const DEFAULT_PROMPT: &str = "My favorite theorem is ";
@@ -445,6 +444,8 @@ impl Stream for TextGenerationStream {
         self.text_gen.all_tokens.push(next_token);
         self.sampled += 1;
 
+        tracing::info!("next_token={}", next_token);
+
         if next_token == self.text_gen.eos_token {
           Poll::Ready(None)
         } else if let Ok(t) = self.text_gen.token_output_stream.next_token(next_token) {
@@ -462,24 +463,4 @@ impl Stream for TextGenerationStream {
       None => Poll::Ready(None),
     }
   }
-}
-
-pub async fn chat_completion(mut text_gen: TextGeneration) -> anyhow::Result<String> {
-  text_gen.generate()
-}
-
-pub async fn chat_completion_stream(
-  stream: TextGenerationStream,
-) -> anyhow::Result<StoppingStream<Box<dyn Stream<Item = String> + Unpin + Send>>> {
-  let pinned = Box::pin(Box::new(stream));
-
-  Ok(StoppingStream::wrap_with_stop_words(
-    Box::new(pinned),
-    vec![
-      "<|ASSISTANT|>".to_string(),
-      "<|USER|>".to_string(),
-      "<|TOOL|>".to_string(),
-      "<|SYSTEM|>".to_string(),
-    ],
-  ))
 }
