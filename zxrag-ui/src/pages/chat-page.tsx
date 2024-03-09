@@ -19,8 +19,6 @@ export function ChatPage() {
 	const [temperature, setTemperature] = useState<number[] | undefined>([0.6]);
 	const [topP, setTopP] = useState<number[] | undefined>([0.9]);
 	const [maxLength, setMaxLength] = useState<number[] | undefined>([128]);
-	const [userPrompt, setUserPrompt] = useState("");
-	const [output, setOutput] = useState("");
 	const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
 	const [lastUserMessage, setLastUserMessage] = useState("");
 	const [lastAssistantMessage, setLastAssistantMessage] = useState("");
@@ -34,7 +32,7 @@ export function ChatPage() {
 	});
 
 	const handleUserMessageChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-		setUserPrompt(event.target.value);
+		setLastUserMessage(event.target.value);
 	};
 
 	const handleSystemMessageChange = (
@@ -44,34 +42,41 @@ export function ChatPage() {
 	};
 
 	const handleClick = async () => {
-		if (userPrompt === "") {
-			return;
-		}
-
 		setIsLoading(true);
 
-		if (output !== "") {
+		const mergeChatMessages: ChatMessage[] = [];
+
+		if (lastAssistantMessage !== "") {
 			setChatMessages((chatMessages) => [
 				...chatMessages,
-				{ role: "assistant", content: output },
+				{ role: "assistant", content: lastAssistantMessage },
 			]);
 
-			setOutput("");
+			mergeChatMessages.push({
+				role: "assistant",
+				content: lastAssistantMessage,
+			});
+
+			setLastAssistantMessage("");
 		}
 
 		setChatMessages((chatMessages) => [
 			...chatMessages,
-			{ role: "user", content: userPrompt },
+			{ role: "user", content: lastUserMessage },
 		]);
+
+		mergeChatMessages.push({ role: "user", content: lastUserMessage });
+
+		setLastUserMessage("");
 
 		try {
 			const stream = await openai.chat.completions.create({
-				model: "gpt-4",
+				model: "NULL",
 				messages: [
 					...chatMessages.filter(
 						(chat) => chat.role === "user" || chat.role === "assistant",
 					),
-					{ role: "user", content: userPrompt },
+					{ role: "user", content: lastUserMessage },
 				].map((chat) => {
 					if (chat.role === "user") {
 						return { role: "user", content: chat.content };
@@ -88,7 +93,7 @@ export function ChatPage() {
 			for await (const chunk of stream) {
 				const newContent = chunk.choices[0]?.delta?.content || "";
 
-				setOutput((prev) => prev + newContent);
+				setLastAssistantMessage((prev) => prev + newContent);
 			}
 		} catch (error) {
 			console.error(error);
@@ -98,87 +103,40 @@ export function ChatPage() {
 			return;
 		}
 
-		setUserPrompt("");
-
 		setIsLoading(false);
 	};
 
 	return (
 		<>
-			<div className="container h-full py-6">
-				<div className="grid h-full items-stretch gap-6 md:grid-cols-[1fr_200px]">
-					<div className="flex flex-col space-y-4">
-						<div className="flex flex-row gap-6 h-full lg:grid-cols-2">
-							<div className="flex flex-col basis-1/3 space-y-4">
-								<div className="flex flex-1 flex-col space-y-2">
-									<Label htmlFor="input">Input</Label>
-									<Textarea
-										id="input"
-										placeholder="We is going to the market."
-										className="flex-1"
-										value={userPrompt}
-										onChange={handleUserMessageChange}
-									/>
-								</div>
-								<div className="flex flex-col space-y-2">
-									<Label htmlFor="instructions">Instructions</Label>
-									<Textarea
-										id="instructions"
-										placeholder="Fix the grammar."
-										value={systemMessage}
-										onChange={handleSystemMessageChange}
-									/>
-								</div>
-							</div>
-							<div className="mt-[21px] basis-2/3 h-full max-h-full overflow-hidden">
-								{chatMessages.map((chat) => {
-									if (chat.role === "user") {
-										return (
-											<div className="flex gap-3 w-full p-2">
-												<Avatar className="h-6 w-6">
-													<AvatarFallback>Y</AvatarFallback>
-												</Avatar>
-												<div className="flex flex-col">
-													<span className="font-bold">You</span>
-													<span>{chat.content}</span>
-												</div>
-											</div>
-										);
-									}
-									if (chat.role === "assistant") {
-										return (
-											<div className="flex gap-3 w-full p-2">
-												<Avatar className="h-6 w-6">
-													<AvatarFallback className="bg-red-500 text-white">
-														A
-													</AvatarFallback>
-												</Avatar>
-												<div className="flex flex-col">
-													<span className="font-bold">AI</span>
-													<span>{chat.content}</span>
-												</div>
-											</div>
-										);
-									}
-									return null;
-								})}
-								{output !== "" && (
-									<div className="flex gap-3 w-full p-2">
-										<Avatar className="h-6 w-6">
-											<AvatarFallback className="bg-red-500 text-white">
-												A
-											</AvatarFallback>
-										</Avatar>
-										<div className="flex flex-col">
-											<span className="font-bold">AI</span>
-											<span>{output}</span>
-										</div>
-									</div>
-								)}
-							</div>
+			<div className="container h-full py-6 overflow-hidden">
+				<div className="flex h-full gap-6">
+					<div className="flex flex-col basis-3/12 space-y-4">
+						<div className="flex flex-1 flex-col space-y-2">
+							<Label htmlFor="input">Input</Label>
+							<Textarea
+								id="input"
+								placeholder="We is going to the market."
+								className="flex-1"
+								value={lastUserMessage}
+								onChange={handleUserMessageChange}
+								disabled={isLoading}
+							/>
+						</div>
+						<div className="flex flex-col space-y-2">
+							<Label htmlFor="instructions">Instructions</Label>
+							<Textarea
+								id="instructions"
+								placeholder="Fix the grammar."
+								value={systemMessage}
+								onChange={handleSystemMessageChange}
+								disabled={isLoading}
+							/>
 						</div>
 						<div className="flex items-center space-x-2">
-							<Button onClick={handleClick}>
+							<Button
+								onClick={handleClick}
+								disabled={isLoading || lastUserMessage === ""}
+							>
 								{isLoading && (
 									<ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
 								)}{" "}
@@ -190,7 +148,53 @@ export function ChatPage() {
 							</Button>
 						</div>
 					</div>
-					<div className="flex-col space-y-4 sm:flex md:order-2">
+					<div className="flex flex-col basis-7/12 max-h-full overflow-auto">
+						{chatMessages.map((chat) => {
+							if (chat.role === "user") {
+								return (
+									<div className="flex gap-3 w-full p-2">
+										<Avatar className="h-6 w-6">
+											<AvatarFallback>Y</AvatarFallback>
+										</Avatar>
+										<div className="flex flex-col">
+											<span className="font-bold">You</span>
+											<span>{chat.content}</span>
+										</div>
+									</div>
+								);
+							}
+							if (chat.role === "assistant") {
+								return (
+									<div className="flex gap-3 w-full p-2">
+										<Avatar className="h-6 w-6">
+											<AvatarFallback className="bg-red-500 text-white">
+												A
+											</AvatarFallback>
+										</Avatar>
+										<div className="flex flex-col">
+											<span className="font-bold">AI</span>
+											<span>{chat.content}</span>
+										</div>
+									</div>
+								);
+							}
+							return null;
+						})}
+						{lastAssistantMessage !== "" && (
+							<div className="flex gap-3 w-full p-2">
+								<Avatar className="h-6 w-6">
+									<AvatarFallback className="bg-red-500 text-white">
+										A
+									</AvatarFallback>
+								</Avatar>
+								<div className="flex flex-col">
+									<span className="font-bold">AI</span>
+									<span>{lastAssistantMessage}</span>
+								</div>
+							</div>
+						)}
+					</div>
+					<div className="flex flex-col basis-2/12 space-y-4">
 						<TemperatureSelector
 							temperature={temperature}
 							setTemperature={setTemperature}
