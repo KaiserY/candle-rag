@@ -11,6 +11,7 @@ pub struct BackendConf {
   pub model_path: String,
   pub tokenizer_path: String,
   pub device: String,
+  pub lancedb_path: String,
 }
 
 #[derive(Debug, Clone)]

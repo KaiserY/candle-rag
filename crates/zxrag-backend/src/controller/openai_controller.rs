@@ -43,7 +43,7 @@ pub async fn chat_completions(
 
   let response = if stream_response {
     let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?
-      .throttle(Duration::from_millis(100));
+      .throttle(Duration::from_millis(10));
 
     let completions_stream = stream.map(move |chunk| {
       Event::default().json_data(ChatCompletionChunk {

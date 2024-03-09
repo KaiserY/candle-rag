@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { CounterClockwiseClockIcon } from "@radix-ui/react-icons";
+import { CounterClockwiseClockIcon, ReloadIcon } from "@radix-ui/react-icons";
 import { ChangeEvent, useState } from "react";
 
 import { TemperatureSelector } from "@/components/temperature-selector";
@@ -22,6 +22,10 @@ export function ChatPage() {
 	const [userPrompt, setUserPrompt] = useState("");
 	const [output, setOutput] = useState("");
 	const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
+	const [lastUserMessage, setLastUserMessage] = useState("");
+	const [lastAssistantMessage, setLastAssistantMessage] = useState("");
+	const [systemMessage, setSystemMessage] = useState("");
+	const [isLoading, setIsLoading] = useState<boolean>(false);
 
 	const openai = new OpenAI({
 		baseURL: `${window.location.protocol}//${window.location.host}/v1`,
@@ -29,14 +33,22 @@ export function ChatPage() {
 		dangerouslyAllowBrowser: true,
 	});
 
-	const handleUserPromptChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
+	const handleUserMessageChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
 		setUserPrompt(event.target.value);
+	};
+
+	const handleSystemMessageChange = (
+		event: ChangeEvent<HTMLTextAreaElement>,
+	) => {
+		setSystemMessage(event.target.value);
 	};
 
 	const handleClick = async () => {
 		if (userPrompt === "") {
 			return;
 		}
+
+		setIsLoading(true);
 
 		if (output !== "") {
 			setChatMessages((chatMessages) => [
@@ -52,30 +64,43 @@ export function ChatPage() {
 			{ role: "user", content: userPrompt },
 		]);
 
-		const stream = await openai.chat.completions.create({
-			model: "gpt-4",
-			messages: chatMessages
-				.filter((chat) => chat.role === "user" || chat.role === "assistant")
-				.map((chat) => {
+		try {
+			const stream = await openai.chat.completions.create({
+				model: "gpt-4",
+				messages: [
+					...chatMessages.filter(
+						(chat) => chat.role === "user" || chat.role === "assistant",
+					),
+					{ role: "user", content: userPrompt },
+				].map((chat) => {
 					if (chat.role === "user") {
 						return { role: "user", content: chat.content };
 					}
 
 					return { role: "assistant", content: chat.content };
 				}),
-			stream: true,
-			max_tokens: maxLength === undefined ? undefined : maxLength[0],
-			top_p: topP === undefined ? undefined : topP[0],
-			temperature: temperature === undefined ? undefined : temperature[0],
-		});
+				stream: true,
+				max_tokens: maxLength === undefined ? undefined : maxLength[0],
+				top_p: topP === undefined ? undefined : topP[0],
+				temperature: temperature === undefined ? undefined : temperature[0],
+			});
 
-		for await (const chunk of stream) {
-			const newContent = chunk.choices[0]?.delta?.content || "";
+			for await (const chunk of stream) {
+				const newContent = chunk.choices[0]?.delta?.content || "";
 
-			setOutput((prev) => prev + newContent);
+				setOutput((prev) => prev + newContent);
+			}
+		} catch (error) {
+			console.error(error);
+
+			setIsLoading(false);
+
+			return;
 		}
 
 		setUserPrompt("");
+
+		setIsLoading(false);
 	};
 
 	return (
@@ -92,15 +117,20 @@ export function ChatPage() {
 										placeholder="We is going to the market."
 										className="flex-1"
 										value={userPrompt}
-										onChange={handleUserPromptChange}
+										onChange={handleUserMessageChange}
 									/>
 								</div>
 								<div className="flex flex-col space-y-2">
 									<Label htmlFor="instructions">Instructions</Label>
-									<Textarea id="instructions" placeholder="Fix the grammar." />
+									<Textarea
+										id="instructions"
+										placeholder="Fix the grammar."
+										value={systemMessage}
+										onChange={handleSystemMessageChange}
+									/>
 								</div>
 							</div>
-							<div className="mt-[21px] basis-2/3">
+							<div className="mt-[21px] basis-2/3 h-full max-h-full overflow-hidden">
 								{chatMessages.map((chat) => {
 									if (chat.role === "user") {
 										return (
@@ -115,13 +145,12 @@ export function ChatPage() {
 											</div>
 										);
 									}
-
 									if (chat.role === "assistant") {
 										return (
 											<div className="flex gap-3 w-full p-2">
 												<Avatar className="h-6 w-6">
 													<AvatarFallback className="bg-red-500 text-white">
-														AI
+														A
 													</AvatarFallback>
 												</Avatar>
 												<div className="flex flex-col">
@@ -131,14 +160,13 @@ export function ChatPage() {
 											</div>
 										);
 									}
-
 									return null;
 								})}
 								{output !== "" && (
 									<div className="flex gap-3 w-full p-2">
 										<Avatar className="h-6 w-6">
 											<AvatarFallback className="bg-red-500 text-white">
-												AI
+												A
 											</AvatarFallback>
 										</Avatar>
 										<div className="flex flex-col">
@@ -150,7 +178,12 @@ export function ChatPage() {
 							</div>
 						</div>
 						<div className="flex items-center space-x-2">
-							<Button onClick={handleClick}>Submit</Button>
+							<Button onClick={handleClick}>
+								{isLoading && (
+									<ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+								)}{" "}
+								Send
+							</Button>
 							<Button variant="secondary">
 								<span className="sr-only">Show history</span>
 								<CounterClockwiseClockIcon className="h-4 w-4" />
