@@ -13,10 +13,10 @@ pub enum ModelId {
   Zephyr7bBeta,
   #[serde(rename = "Mistral-7B-Instruct-v0.1")]
   #[strum(serialize = "Mistral-7B-Instruct-v0.1")]
-  Mistral7bInstructV01,
+  Mistral7bInstructV0_1,
   #[serde(rename = "Mistral-7B-Instruct-v0.2")]
   #[strum(serialize = "Mistral-7B-Instruct-v0.2")]
-  Mistral7bInstructV02,
+  Mistral7bInstructV0_2,
   #[default]
   None,
 }
@@ -27,14 +27,14 @@ impl ModelId {
       self,
       Self::Zephyr7bAlpha
         | Self::Zephyr7bBeta
-        | Self::Mistral7bInstructV01
-        | Self::Mistral7bInstructV02
+        | Self::Mistral7bInstructV0_1
+        | Self::Mistral7bInstructV0_2
     )
   }
 
   pub fn is_zephyr(&self) -> bool {
     match self {
-      Self::Mistral7bInstructV01 | Self::Mistral7bInstructV02 | Self::None => false,
+      Self::Mistral7bInstructV0_1 | Self::Mistral7bInstructV0_2 | Self::None => false,
       Self::Zephyr7bAlpha | Self::Zephyr7bBeta => true,
     }
   }
