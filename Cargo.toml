@@ -34,7 +34,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 tracing-appender = "0.2.3"
 tracing-chrome = "0.7.1"
 time = { version = "0.3.34", features = ["local-offset"] }
-strum = { version = "0.26.1", features = ["derive"] }
+strum = { version = "0.26.2", features = ["derive"] }
 axum = { version = "0.7.4", features = ["tracing"] }
 axum-extra = { version = "0.9.2", features = ["cookie"] }
 rust-embed = { version = "8.3.0", features = ["compression"] }
@@ -56,3 +56,4 @@ tinyvec = { version = "1.6.0", features = ["serde"] }
 pin-project = "1.1.5"
 bindgen_cuda = "0.1.4"
 vectordb = "0.4.10"
+dyn-clone = "1.0.17"

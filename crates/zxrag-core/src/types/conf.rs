@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::types::model::ModelId;
+use crate::types::model::{ModelEngine, ModelId};
 
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub struct BackendConf {
@@ -12,6 +12,15 @@ pub struct BackendConf {
   pub tokenizer_path: String,
   pub device: String,
   pub lancedb_path: String,
+}
+
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub struct LlmConf {
+  pub model_id: ModelId,
+  pub model_engine: ModelEngine,
+  pub model_path: String,
+  pub tokenizer_path: String,
+  pub device: String,
 }
 
 #[derive(Debug, Clone)]

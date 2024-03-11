@@ -43,3 +43,17 @@ impl ModelId {
     false
   }
 }
+
+#[derive(
+  Clone, Default, Debug, Copy, PartialEq, Eq, Deserialize, Serialize, EnumString, Display,
+)]
+pub enum ModelEngine {
+  #[serde(rename = "huggingface")]
+  #[strum(serialize = "huggingface")]
+  HuggingFace,
+  #[serde(rename = "llama.cpp")]
+  #[strum(serialize = "llama.cpp")]
+  LlamaCpp,
+  #[default]
+  None,
+}
