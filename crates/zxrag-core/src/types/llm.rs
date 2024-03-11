@@ -6,7 +6,10 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokenizers::Tokenizer;
 
-use crate::types::model::{ModelEngine, ModelId};
+use crate::types::{
+  model::{ModelEngine, ModelId},
+  token_output_stream::TokenOutputStream,
+};
 
 pub trait LlmModel: DynClone {
   fn id(&self) -> ModelId;
@@ -31,7 +34,8 @@ pub struct TextGenerationSetting {
 pub struct TextGeneration<T: LlmModel> {
   pub model: T,
   pub setting: TextGenerationSetting,
-  pub logits_processor: LogitsProcessor,
+  logits_processor: LogitsProcessor,
+  token_output_stream: TokenOutputStream,
   all_tokens: Vec<u32>,
   eos_token: u32,
 }
@@ -49,18 +53,25 @@ where
 
     let logits_processor = LogitsProcessor::new(setting.seed, temperature, setting.top_p);
 
+    let token_output_stream = TokenOutputStream::new(model.tokenizer().clone());
+
     let eos_token = if model.id().is_open_chat() {
       "<|end_of_turn|>"
     } else {
       "</s>"
     };
 
-    let eos_token = *model.tokenizer().get_vocab(true).get(eos_token).unwrap();
+    let eos_token = *token_output_stream
+      .tokenizer()
+      .get_vocab(true)
+      .get(eos_token)
+      .ok_or(anyhow::anyhow!("get eos_token failed"))?;
 
     Ok(Self {
       model,
       setting,
       logits_processor,
+      token_output_stream,
       all_tokens: vec![],
       eos_token,
     })
@@ -70,7 +81,7 @@ where
     tracing::info!("prompt={}", self.setting.prompt);
 
     let tokens = self
-      .model
+      .token_output_stream
       .tokenizer()
       .encode(self.setting.prompt.clone(), true)
       .map_err(anyhow::Error::msg)?;
@@ -100,13 +111,21 @@ where
         break;
       };
 
-      let token_str = self
-        .model
-        .tokenizer()
-        .decode(&[next_token], true)
-        .map_err(anyhow::Error::msg)?;
+      if let Some(t) = self.token_output_stream.next_token(next_token)? {
+        tracing::info!("t={}", t);
 
-      output.push_str(&token_str);
+        output.push_str(&t);
+      }
+    }
+
+    if let Some(rest) = self
+      .token_output_stream
+      .decode_rest()
+      .map_err(candle_core::Error::msg)?
+    {
+      tracing::info!("rest={}", rest);
+
+      output.push_str(&rest);
     }
 
     let dt = start_gen.elapsed();
@@ -182,10 +201,14 @@ where
 
         if next_token == self.text_gen.eos_token {
           Poll::Ready(None)
-        } else if let Ok(t) = self.text_gen.model.tokenizer().decode(&[next_token], true) {
+        } else if let Ok(t) = self.text_gen.token_output_stream.next_token(next_token) {
           tracing::info!("t={:?}", t);
 
-          Poll::Ready(Some(t))
+          if let Some(t) = t {
+            Poll::Ready(Some(t))
+          } else {
+            Poll::Ready(Some("".to_string()))
+          }
         } else {
           Poll::Ready(None)
         }

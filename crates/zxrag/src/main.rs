@@ -5,10 +5,11 @@ use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use zxrag_backend::conf::init_backend_conf;
 use zxrag_backend::run_backend;
-use zxrag_core::models::llama_cpp::{Config, Model};
+use zxrag_core::models::llama_cpp::{Config, Model, MODEL};
 use zxrag_core::models::llama_cpp_new::Model as NewModel;
 use zxrag_core::types::conf::{BackendConf, LlmConf};
-use zxrag_core::types::handle::LlmModelHandle;
+use zxrag_core::types::handle::{LlmModelHandle, LLM_MODEL_HANDLE};
+use zxrag_core::types::llm::{TextGeneration, TextGenerationSetting};
 use zxrag_core::types::model::ModelEngine;
 
 #[derive(Debug, Default, Args)]
@@ -96,9 +97,30 @@ fn main() -> Result<(), anyhow::Error> {
 
       let model = NewModel::new(&model_config)?;
 
-      let aa = LLM_MODEL.set(LlmModelHandle::LlamaCpp(model)).ok();
+      let _ = LLM_MODEL_HANDLE.set(LlmModelHandle::LlamaCpp(model));
 
-      let model = LLM_MODEL.get().unwrap();
+      let model = match LLM_MODEL_HANDLE
+        .get()
+        .ok_or(anyhow::anyhow!("Get LLM_MODEL_HANDLE failed"))?
+      {
+        LlmModelHandle::LlamaCpp(model) => model,
+      };
+
+      let text_gen_setting = TextGenerationSetting {
+        temperature: 0.8,
+        top_p: None,
+        seed: 299792458,
+        repeat_penalty: 1.1,
+        repeat_last_n: 64,
+        sample_len: 128,
+        prompt: "<|user|>\nHello!</s>\n<|assistant|>\n".to_string(),
+      };
+
+      let mut text_gen = TextGeneration::<NewModel>::new(model.clone(), text_gen_setting)?;
+
+      let output = text_gen.generate()?;
+
+      tracing::info!("{output}");
     }
   }
 
