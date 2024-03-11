@@ -7,5 +7,5 @@ pub static LLM_MODEL_HANDLE: OnceLock<LlmModelHandle> = OnceLock::new();
 
 pub enum LlmModelHandle {
   LlamaCpp(LlamaCppModel),
-  // Phi(PhiModel),
+  Phi(PhiModel),
 }

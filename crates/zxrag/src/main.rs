@@ -99,13 +99,6 @@ fn main() -> Result<(), anyhow::Error> {
 
       let _ = LLM_MODEL_HANDLE.set(LlmModelHandle::LlamaCpp(model));
 
-      let model = match LLM_MODEL_HANDLE
-        .get()
-        .ok_or(anyhow::anyhow!("Get LLM_MODEL_HANDLE failed"))?
-      {
-        LlmModelHandle::LlamaCpp(model) => model,
-      };
-
       let text_gen_setting = TextGenerationSetting {
         temperature: 0.8,
         top_p: None,
@@ -116,7 +109,17 @@ fn main() -> Result<(), anyhow::Error> {
         prompt: "<|user|>\nHello!</s>\n<|assistant|>\n".to_string(),
       };
 
-      let mut text_gen = TextGeneration::<NewModel>::new(model.clone(), text_gen_setting)?;
+      let mut text_gen = match LLM_MODEL_HANDLE
+        .get()
+        .ok_or(anyhow::anyhow!("Get LLM_MODEL_HANDLE failed"))?
+      {
+        LlmModelHandle::LlamaCpp(model) => {
+          TextGeneration::new(Box::new(model.clone()), text_gen_setting)?
+        }
+        LlmModelHandle::Phi(model) => {
+          TextGeneration::new(Box::new(model.clone()), text_gen_setting)?
+        }
+      };
 
       let output = text_gen.generate()?;
 

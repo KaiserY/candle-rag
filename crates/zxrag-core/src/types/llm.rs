@@ -31,8 +31,8 @@ pub struct TextGenerationSetting {
   pub prompt: String,
 }
 
-pub struct TextGeneration<T: LlmModel> {
-  pub model: T,
+pub struct TextGeneration {
+  pub model: Box<dyn LlmModel>,
   pub setting: TextGenerationSetting,
   logits_processor: LogitsProcessor,
   token_output_stream: TokenOutputStream,
@@ -40,11 +40,8 @@ pub struct TextGeneration<T: LlmModel> {
   eos_token: u32,
 }
 
-impl<T> TextGeneration<T>
-where
-  T: LlmModel,
-{
-  pub fn new(model: T, setting: TextGenerationSetting) -> anyhow::Result<Self> {
+impl TextGeneration {
+  pub fn new(model: Box<dyn LlmModel>, setting: TextGenerationSetting) -> anyhow::Result<Self> {
     let temperature = if setting.temperature == 0. {
       None
     } else {
@@ -164,15 +161,12 @@ where
   }
 }
 
-pub struct TextGenerationStream<T: LlmModel> {
-  pub text_gen: TextGeneration<T>,
+pub struct TextGenerationStream {
+  pub text_gen: TextGeneration,
   generated_tokens: usize,
 }
 
-impl<T> Stream for TextGenerationStream<T>
-where
-  T: LlmModel + Unpin,
-{
+impl Stream for TextGenerationStream {
   type Item = String;
 
   fn poll_next(mut self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
