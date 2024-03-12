@@ -10,6 +10,9 @@ use crate::types::{
   model::{ModelEngine, ModelId},
   token_output_stream::TokenOutputStream,
 };
+use crate::util::eos_token;
+
+const MAX_SEQ_LEN: usize = 4096;
 
 pub trait LlmModel: DynClone {
   fn id(&self) -> ModelId;
@@ -32,7 +35,7 @@ pub struct TextGenerationSetting {
 }
 
 pub struct TextGeneration {
-  pub model: Box<dyn LlmModel>,
+  pub model: Box<dyn LlmModel + Send + Sync>,
   pub setting: TextGenerationSetting,
   logits_processor: LogitsProcessor,
   token_output_stream: TokenOutputStream,
@@ -41,7 +44,10 @@ pub struct TextGeneration {
 }
 
 impl TextGeneration {
-  pub fn new(model: Box<dyn LlmModel>, setting: TextGenerationSetting) -> anyhow::Result<Self> {
+  pub fn new(
+    model: Box<dyn LlmModel + Send + Sync>,
+    setting: TextGenerationSetting,
+  ) -> anyhow::Result<Self> {
     let temperature = if setting.temperature == 0. {
       None
     } else {
@@ -52,11 +58,7 @@ impl TextGeneration {
 
     let token_output_stream = TokenOutputStream::new(model.tokenizer().clone());
 
-    let eos_token = if model.id().is_open_chat() {
-      "<|end_of_turn|>"
-    } else {
-      "</s>"
-    };
+    let eos_token = eos_token(model.id());
 
     let eos_token = *token_output_stream
       .tokenizer()
@@ -164,6 +166,34 @@ impl TextGeneration {
 pub struct TextGenerationStream {
   pub text_gen: TextGeneration,
   generated_tokens: usize,
+}
+
+impl TextGenerationStream {
+  pub fn new(mut text_gen: TextGeneration) -> anyhow::Result<Self> {
+    tracing::info!("prompt_str={}", &text_gen.setting.prompt);
+
+    let tokens = text_gen
+      .token_output_stream
+      .tokenizer()
+      .encode(text_gen.setting.prompt.clone(), true)
+      .map_err(anyhow::Error::msg)?;
+
+    let mut prompt_tokens = tokens.get_ids().to_owned();
+
+    prompt_tokens = if prompt_tokens.len() + text_gen.setting.sample_len > MAX_SEQ_LEN - 10 {
+      let to_remove = prompt_tokens.len() + text_gen.setting.sample_len + 10 - MAX_SEQ_LEN;
+      prompt_tokens[prompt_tokens.len().saturating_sub(to_remove)..].to_vec()
+    } else {
+      prompt_tokens
+    };
+
+    text_gen.all_tokens.extend(prompt_tokens.clone());
+
+    Ok(Self {
+      text_gen,
+      generated_tokens: 0,
+    })
+  }
 }
 
 impl Stream for TextGenerationStream {

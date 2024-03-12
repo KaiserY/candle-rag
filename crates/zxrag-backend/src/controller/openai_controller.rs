@@ -1,3 +1,4 @@
+use axum::extract::State;
 use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
 use derive_more::{Deref, DerefMut, From};
 use either::Either;
@@ -12,22 +13,34 @@ use time::OffsetDateTime;
 use tinyvec::{tiny_vec, TinyVec};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
-use zxrag_core::models::llama_cpp::{TextGeneration, TextGenerationStream, MODEL};
-use zxrag_core::types::conf::ChatCompletionSetting;
+use zxrag_core::types::handle::get_text_gen;
+use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
 use zxrag_core::types::model::ModelId;
 
 use crate::error::BackendError;
+use crate::BackendState;
 
 pub async fn chat_completions(
+  State(state): State<BackendState>,
   Json(req): Json<ChatCompletionRequest<'_>>,
 ) -> Result<impl IntoResponse, BackendError> {
   let fp = format!("zxrag-{}", env!("CARGO_PKG_VERSION"));
 
-  let model = (*MODEL.get().ok_or(anyhow::anyhow!("model get error"))?).clone();
+  // let setting = ChatCompletionSetting {
+  //   temperature: req.temperature.unwrap_or(0.8),
+  //   top_p: req.top_p,
+  //   seed: req.seed.unwrap_or(299792458),
+  //   repeat_penalty: req.frequency_penalty.unwrap_or(1.1),
+  //   repeat_last_n: 64,
+  //   sample_len: req
+  //     .max_tokens
+  //     .map_or(128, |value| value.try_into().unwrap_or(128)),
+  //   prompt: Some(untokenized_context),
+  // };
 
-  let untokenized_context = req.messages.to_prompt(model.model_id)?;
+  let untokenized_context = req.messages.to_prompt(state.config.llm_conf.model_id)?;
 
-  let setting = ChatCompletionSetting {
+  let text_gen_setting = TextGenerationSetting {
     temperature: req.temperature.unwrap_or(0.8),
     top_p: req.top_p,
     seed: req.seed.unwrap_or(299792458),
@@ -36,14 +49,15 @@ pub async fn chat_completions(
     sample_len: req
       .max_tokens
       .map_or(128, |value| value.try_into().unwrap_or(128)),
-    prompt: Some(untokenized_context),
+    prompt: untokenized_context,
   };
+
+  let mut text_gen = get_text_gen(text_gen_setting)?;
 
   let stream_response = req.stream.unwrap_or(false);
 
   let response = if stream_response {
-    let stream = TextGenerationStream::new(TextGeneration::new(model, setting)?)?
-      .throttle(Duration::from_millis(10));
+    let stream = TextGenerationStream::new(text_gen)?.throttle(Duration::from_millis(10));
 
     let completions_stream = stream.map(move |chunk| {
       Event::default().json_data(ChatCompletionChunk {
@@ -65,7 +79,7 @@ pub async fn chat_completions(
 
     ChatCompletionResponse::Stream(Sse::new(completions_stream))
   } else {
-    let content_str = TextGeneration::new(model, setting)?.generate()?;
+    let content_str = text_gen.generate()?;
 
     let response = ChatCompletion {
       id: Uuid::new_v4().to_string().into(),

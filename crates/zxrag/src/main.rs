@@ -5,12 +5,9 @@ use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use zxrag_backend::conf::init_backend_conf;
 use zxrag_backend::run_backend;
-use zxrag_core::models::llama_cpp::{Config, Model, MODEL};
-use zxrag_core::models::llama_cpp_new::Model as NewModel;
 use zxrag_core::types::conf::{BackendConf, LlmConf};
-use zxrag_core::types::handle::{LlmModelHandle, LLM_MODEL_HANDLE};
-use zxrag_core::types::llm::{TextGeneration, TextGenerationSetting};
-use zxrag_core::types::model::ModelEngine;
+use zxrag_core::types::handle::{get_text_gen, set_llm_model_handle};
+use zxrag_core::types::llm::TextGenerationSetting;
 
 #[derive(Debug, Default, Args)]
 pub struct CliConfig {
@@ -66,14 +63,17 @@ fn main() -> Result<(), anyhow::Error> {
         )
         .init();
 
-      let model_config = Config {
-        model_id: config.model_id,
-        model_path: config.model_path.clone(),
-        tokenizer_path: config.tokenizer_path.clone(),
-        device: config.device.clone(),
+      let model_config = LlmConf {
+        model_id: config.llm_conf.model_id,
+        model_engine: config.llm_conf.model_engine,
+        model_path: config.llm_conf.model_path.clone(),
+        tokenizer_path: config.llm_conf.tokenizer_path.clone(),
+        device: config.llm_conf.device.clone(),
       };
 
-      MODEL.get_or_init(|| Model::new(&model_config).expect("init model failed"));
+      tracing::info!("model_config={:?}", model_config);
+
+      set_llm_model_handle(config.llm_conf.model_id, &model_config)?;
 
       run_backend(config)?;
     }
@@ -88,16 +88,16 @@ fn main() -> Result<(), anyhow::Error> {
         .init();
 
       let model_config = LlmConf {
-        model_id: config.model_id,
-        model_engine: ModelEngine::LlamaCpp,
-        model_path: config.model_path,
-        tokenizer_path: config.tokenizer_path,
-        device: config.device,
+        model_id: config.llm_conf.model_id,
+        model_engine: config.llm_conf.model_engine,
+        model_path: config.llm_conf.model_path.clone(),
+        tokenizer_path: config.llm_conf.tokenizer_path.clone(),
+        device: config.llm_conf.device.clone(),
       };
 
-      let model = NewModel::new(&model_config)?;
+      tracing::info!("model_config={:?}", model_config);
 
-      let _ = LLM_MODEL_HANDLE.set(LlmModelHandle::LlamaCpp(model));
+      set_llm_model_handle(config.llm_conf.model_id, &model_config)?;
 
       let text_gen_setting = TextGenerationSetting {
         temperature: 0.8,
@@ -106,20 +106,10 @@ fn main() -> Result<(), anyhow::Error> {
         repeat_penalty: 1.1,
         repeat_last_n: 64,
         sample_len: 128,
-        prompt: "<|user|>\nHello!</s>\n<|assistant|>\n".to_string(),
+        prompt: "<s>[INST] Hello! [/INST]".to_string(),
       };
 
-      let mut text_gen = match LLM_MODEL_HANDLE
-        .get()
-        .ok_or(anyhow::anyhow!("Get LLM_MODEL_HANDLE failed"))?
-      {
-        LlmModelHandle::LlamaCpp(model) => {
-          TextGeneration::new(Box::new(model.clone()), text_gen_setting)?
-        }
-        LlmModelHandle::Phi(model) => {
-          TextGeneration::new(Box::new(model.clone()), text_gen_setting)?
-        }
-      };
+      let mut text_gen = get_text_gen(text_gen_setting)?;
 
       let output = text_gen.generate()?;
 
