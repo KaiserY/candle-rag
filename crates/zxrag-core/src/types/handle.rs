@@ -1,6 +1,6 @@
 use std::sync::OnceLock;
 
-use crate::models::llama_cpp_new::Model as LlamaCppModel;
+use crate::models::llama_cpp::Model as LlamaCppModel;
 use crate::models::phi::Model as PhiModel;
 use crate::types::conf::LlmConf;
 use crate::types::llm::{TextGeneration, TextGenerationSetting};
