@@ -26,18 +26,6 @@ pub async fn chat_completions(
 ) -> Result<impl IntoResponse, BackendError> {
   let fp = format!("zxrag-{}", env!("CARGO_PKG_VERSION"));
 
-  // let setting = ChatCompletionSetting {
-  //   temperature: req.temperature.unwrap_or(0.8),
-  //   top_p: req.top_p,
-  //   seed: req.seed.unwrap_or(299792458),
-  //   repeat_penalty: req.frequency_penalty.unwrap_or(1.1),
-  //   repeat_last_n: 64,
-  //   sample_len: req
-  //     .max_tokens
-  //     .map_or(128, |value| value.try_into().unwrap_or(128)),
-  //   prompt: Some(untokenized_context),
-  // };
-
   let untokenized_context = req.messages.to_prompt(state.config.llm_conf.model_id)?;
 
   let text_gen_setting = TextGenerationSetting {
