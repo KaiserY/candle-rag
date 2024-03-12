@@ -20,6 +20,9 @@ pub enum ModelId {
   #[serde(rename = "phi-2")]
   #[strum(serialize = "phi-2")]
   PhiV2,
+  #[serde(rename = "bge-large-zh-v1.5")]
+  #[strum(serialize = "bge-large-zh-v1.5")]
+  BgeLargeZhV1_5,
   #[default]
   None,
 }

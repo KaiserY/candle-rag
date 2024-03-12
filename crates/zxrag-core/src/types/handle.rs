@@ -10,7 +10,7 @@ pub static LLM_MODEL_HANDLE: OnceLock<LlmModelHandle> = OnceLock::new();
 
 pub fn set_llm_model_handle(model_id: ModelId, llm_conf: &LlmConf) -> anyhow::Result<()> {
   match model_id {
-    ModelId::Mistral7bInstructV0_2 | ModelId::Mistral7bInstructV0_1 => {
+    ModelId::Mistral7bInstructV0_2 | ModelId::Mistral7bInstructV0_1 | ModelId::Zephyr7bBeta => {
       let model = LlamaCppModel::new(llm_conf)?;
 
       LLM_MODEL_HANDLE
@@ -28,7 +28,7 @@ pub fn set_llm_model_handle(model_id: ModelId, llm_conf: &LlmConf) -> anyhow::Re
 
       Ok(())
     }
-    _ => Err(anyhow::anyhow!("model not unimplemented")),
+    _ => Err(anyhow::anyhow!("{} not unimplemented", model_id)),
   }
 }
 

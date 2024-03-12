@@ -15,7 +15,6 @@ use zxrag_core::types::conf::BackendConf;
 
 use crate::controller::openai_controller;
 
-pub mod conf;
 pub mod controller;
 pub mod error;
 

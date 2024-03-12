@@ -3,9 +3,9 @@ use clap::{Parser, Subcommand};
 use time::format_description::well_known;
 use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use zxrag_backend::conf::init_backend_conf;
 use zxrag_backend::run_backend;
-use zxrag_core::types::conf::{BackendConf, LlmConf};
+use zxrag_core::models::bert::Model as BertModel;
+use zxrag_core::types::conf::{init_backend_conf, BackendConf};
 use zxrag_core::types::handle::{get_text_gen, set_llm_model_handle};
 use zxrag_core::types::llm::TextGenerationSetting;
 
@@ -38,6 +38,8 @@ fn main() -> Result<(), anyhow::Error> {
     Commands::Backend(cli_config) => {
       let config: BackendConf = init_backend_conf(&cli_config.config)?;
 
+      tracing::info!("config={:?}", config);
+
       let offset = UtcOffset::from_hms(8, 0, 0).expect("should get CST offset");
 
       let timer = tracing_subscriber::fmt::time::OffsetTime::new(offset, well_known::Rfc3339);
@@ -63,22 +65,14 @@ fn main() -> Result<(), anyhow::Error> {
         )
         .init();
 
-      let model_config = LlmConf {
-        model_id: config.llm_conf.model_id,
-        model_engine: config.llm_conf.model_engine,
-        model_path: config.llm_conf.model_path.clone(),
-        tokenizer_path: config.llm_conf.tokenizer_path.clone(),
-        device: config.llm_conf.device.clone(),
-      };
-
-      tracing::info!("model_config={:?}", model_config);
-
-      set_llm_model_handle(config.llm_conf.model_id, &model_config)?;
+      set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
 
       run_backend(config)?;
     }
     Commands::Cli(cli_config) => {
       let config: BackendConf = init_backend_conf(&cli_config.config)?;
+
+      tracing::info!("config={:?}", config);
 
       tracing_subscriber::fmt()
         .with_level(false)
@@ -87,17 +81,7 @@ fn main() -> Result<(), anyhow::Error> {
         .without_time()
         .init();
 
-      let model_config = LlmConf {
-        model_id: config.llm_conf.model_id,
-        model_engine: config.llm_conf.model_engine,
-        model_path: config.llm_conf.model_path.clone(),
-        tokenizer_path: config.llm_conf.tokenizer_path.clone(),
-        device: config.llm_conf.device.clone(),
-      };
-
-      tracing::info!("model_config={:?}", model_config);
-
-      set_llm_model_handle(config.llm_conf.model_id, &model_config)?;
+      set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
 
       let text_gen_setting = TextGenerationSetting {
         temperature: 0.8,
@@ -106,7 +90,8 @@ fn main() -> Result<(), anyhow::Error> {
         repeat_penalty: 1.1,
         repeat_last_n: 64,
         sample_len: 128,
-        prompt: "<s>[INST] Hello! [/INST]".to_string(),
+        // prompt: "<s>[INST] Hello! [/INST]".to_string(),
+        prompt: "<|user|>\nHello!</s>\n<|assistant|>".to_string(),
       };
 
       let mut text_gen = get_text_gen(text_gen_setting)?;
@@ -114,6 +99,12 @@ fn main() -> Result<(), anyhow::Error> {
       let output = text_gen.generate()?;
 
       tracing::info!("{output}");
+
+      let mut bert_model = BertModel::new(&config.embedding_conf)?;
+
+      let tenser = bert_model.embedding("Here is a test sentence")?;
+
+      tracing::info!("{tenser}");
     }
   }
 
