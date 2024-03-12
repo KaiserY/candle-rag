@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { CounterClockwiseClockIcon, ReloadIcon } from "@radix-ui/react-icons";
+import { ReloadIcon, TrashIcon } from "@radix-ui/react-icons";
 import { ChangeEvent, useState } from "react";
 
 import { TemperatureSelector } from "@/components/temperature-selector";
@@ -106,6 +106,13 @@ export function ChatPage() {
 		setIsLoading(false);
 	};
 
+	const handleClearHistroy = async () => {
+		setLastUserMessage("");
+		setLastAssistantMessage("");
+		setSystemMessage("");
+		setChatMessages([]);
+	};
+
 	return (
 		<>
 			<div className="container h-full py-6 overflow-hidden">
@@ -132,7 +139,7 @@ export function ChatPage() {
 								disabled={isLoading}
 							/>
 						</div>
-						<div className="flex items-center space-x-2">
+						<div className="flex items-center justify-between space-x-2">
 							<Button
 								onClick={handleClick}
 								disabled={isLoading || lastUserMessage === ""}
@@ -142,9 +149,16 @@ export function ChatPage() {
 								)}{" "}
 								Send
 							</Button>
-							<Button variant="secondary">
-								<span className="sr-only">Show history</span>
-								<CounterClockwiseClockIcon className="h-4 w-4" />
+							<Button
+								variant="secondary"
+								disabled={isLoading}
+								onClick={handleClearHistroy}
+							>
+								<span className="sr-only">Clear Histroy</span>
+								{isLoading && (
+									<ReloadIcon className="mr-2 h-4 w-4 animate-spin" />
+								)}{" "}
+								<TrashIcon className="h-4 w-4 text-red-500" />
 							</Button>
 						</div>
 					</div>
