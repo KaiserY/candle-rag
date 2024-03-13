@@ -2,7 +2,7 @@ use candle_core::{Device, Tensor};
 use candle_nn::VarBuilder;
 use candle_transformers::models::bert::{BertModel, Config, DTYPE};
 use std::path::PathBuf;
-use tokenizers::Tokenizer;
+use tokenizers::{PaddingParams, Tokenizer};
 
 use crate::types::{
   conf::EmbeddingConf,
@@ -54,7 +54,7 @@ impl Model {
     })
   }
 
-  pub fn embedding(&mut self, prompt: &str) -> anyhow::Result<Tensor> {
+  pub fn embedding_batch(&mut self, prompts: &[&str]) -> anyhow::Result<Tensor> {
     tracing::info!("id={}", self.id);
     tracing::info!("engine={}", self.engine);
 
@@ -62,27 +62,47 @@ impl Model {
 
     let tokenizer = self
       .tokenizer
-      .with_padding(None)
+      .with_padding(Some(PaddingParams {
+        strategy: tokenizers::PaddingStrategy::Fixed(16),
+        ..Default::default()
+      }))
       .with_truncation(None)
       .map_err(anyhow::Error::msg)?;
 
     let tokens = tokenizer
-      .encode(prompt, true)
-      .map_err(anyhow::Error::msg)?
-      .get_ids()
-      .to_vec();
+      .encode_batch(prompts.to_vec(), true)
+      .map_err(anyhow::Error::msg)?;
 
-    let token_ids = Tensor::new(&tokens[..], &self.device)?.unsqueeze(0)?;
+    let token_ids = tokens
+      .iter()
+      .map(|tokens| {
+        let tokens = tokens.get_ids().to_vec();
+        Ok(Tensor::new(tokens.as_slice(), &self.device)?)
+      })
+      .collect::<anyhow::Result<Vec<_>>>()?;
+
+    let token_ids = Tensor::stack(&token_ids, 0)?;
     let token_type_ids = token_ids.zeros_like()?;
 
-    tracing::info!("Loaded and encoded {:?}", start.elapsed());
+    tracing::info!("running inference on batch {:?}", token_ids.shape());
 
-    let start = std::time::Instant::now();
+    let embeddings = self.bert_model.forward(&token_ids, &token_type_ids)?;
 
-    let ys = self.bert_model.forward(&token_ids, &token_type_ids)?;
+    tracing::info!("generated embeddings {:?}", embeddings.shape());
+
+    // Apply some avg-pooling by taking the mean embedding value for all tokens (including padding)
+    let (_n_sentence, n_tokens, _hidden_size) = embeddings.dims3()?;
+    let embeddings = (embeddings.sum(1)? / (n_tokens as f64))?;
+    let embeddings = normalize_l2(&embeddings)?;
+
+    tracing::info!("pooled embeddings {:?}", embeddings.shape());
 
     tracing::info!("Took {:?}", start.elapsed());
 
-    Ok(ys)
+    Ok(embeddings)
   }
+}
+
+pub fn normalize_l2(v: &Tensor) -> anyhow::Result<Tensor> {
+  Ok(v.broadcast_div(&v.sqr()?.sum_keepdim(1)?.sqrt()?)?)
 }

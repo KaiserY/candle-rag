@@ -2,11 +2,19 @@ use std::sync::OnceLock;
 
 use crate::models::llama_cpp::Model as LlamaCppModel;
 use crate::models::phi::Model as PhiModel;
+use crate::models::bert::Model as BertModel;
 use crate::types::conf::LlmConf;
 use crate::types::llm::{TextGeneration, TextGenerationSetting};
 use crate::types::model::ModelId;
 
+pub enum LlmModelHandle {
+  LlamaCpp(LlamaCppModel),
+  Phi(PhiModel),
+}
+
 pub static LLM_MODEL_HANDLE: OnceLock<LlmModelHandle> = OnceLock::new();
+
+pub static EMBEDDING_MODEL_HANDLE: OnceLock<BertModel> = OnceLock::new();
 
 pub fn set_llm_model_handle(model_id: ModelId, llm_conf: &LlmConf) -> anyhow::Result<()> {
   match model_id {
@@ -44,7 +52,6 @@ pub fn get_text_gen(setting: TextGenerationSetting) -> anyhow::Result<TextGenera
   Ok(text_gen)
 }
 
-pub enum LlmModelHandle {
-  LlamaCpp(LlamaCppModel),
-  Phi(PhiModel),
+pub fn set_llm_model_handle(model_id: ModelId, llm_conf: &LlmConf) -> anyhow::Result<()> {
+
 }

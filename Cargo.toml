@@ -10,7 +10,7 @@ edition = "2021"
 zxrag = { path = "./crates/zxrag", version = "0.1.0" }
 zxrag-backend = { path = "./crates/zxrag-backend", version = "0.1.0" }
 zxrag-core = { path = "./crates/zxrag-core", version = "0.1.0" }
-anyhow = "1.0.81"
+anyhow = "1.0.80"
 candle-core = "0.4.1"
 candle-examples = "0.4.1"
 candle-nn = "0.4.1"
@@ -57,3 +57,5 @@ pin-project = "1.1.5"
 bindgen_cuda = "0.1.4"
 vectordb = "0.4.10"
 dyn-clone = "1.0.17"
+arrow-schema = "50.0.0"
+arrow-array = "50.0.0"

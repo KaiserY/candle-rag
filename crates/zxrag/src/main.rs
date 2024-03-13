@@ -1,8 +1,15 @@
+use arrow_array::{
+  types::Float32Type, FixedSizeListArray, Int32Array, RecordBatch, RecordBatchIterator, StringArray,
+};
+use arrow_schema::{DataType, Field, Schema};
 use clap::Args;
 use clap::{Parser, Subcommand};
+use futures::TryStreamExt;
+use std::sync::Arc;
 use time::format_description::well_known;
 use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
+use vectordb::connect;
 use zxrag_backend::run_backend;
 use zxrag_core::models::bert::Model as BertModel;
 use zxrag_core::types::conf::{init_backend_conf, BackendConf};
@@ -81,30 +88,137 @@ fn main() -> Result<(), anyhow::Error> {
         .without_time()
         .init();
 
-      set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
+      // set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
 
-      let text_gen_setting = TextGenerationSetting {
-        temperature: 0.8,
-        top_p: None,
-        seed: 299792458,
-        repeat_penalty: 1.1,
-        repeat_last_n: 64,
-        sample_len: 128,
-        // prompt: "<s>[INST] Hello! [/INST]".to_string(),
-        prompt: "<|user|>\nHello!</s>\n<|assistant|>".to_string(),
-      };
+      // let text_gen_setting = TextGenerationSetting {
+      //   temperature: 0.8,
+      //   top_p: None,
+      //   seed: 299792458,
+      //   repeat_penalty: 1.1,
+      //   repeat_last_n: 64,
+      //   sample_len: 16,
+      //   prompt: "<s>[INST] Hello! [/INST]".to_string(),
+      //   // prompt: "<|user|>\nHello!</s>\n<|assistant|>".to_string(),
+      // };
 
-      let mut text_gen = get_text_gen(text_gen_setting)?;
+      // let mut text_gen = get_text_gen(text_gen_setting)?;
 
-      let output = text_gen.generate()?;
+      // let output = text_gen.generate()?;
 
-      tracing::info!("{output}");
+      // tracing::info!("{output}");
 
       let mut bert_model = BertModel::new(&config.embedding_conf)?;
 
-      let tenser = bert_model.embedding("Here is a test sentence")?;
+      let sentences = [
+        "The cat sits outside",
+        "A man is playing guitar",
+        "I love pasta",
+        "The new movie is awesome",
+        "The cat plays in the garden",
+        "A woman watches TV",
+        "The new movie is so great",
+        "Do you like pizza?",
+      ];
+
+      const DIM: usize = 1024;
+
+      let tenser = bert_model.embedding_batch(&["A man is playing guitar"])?;
 
       tracing::info!("{tenser}");
+
+      let tenser = tenser.flatten_all()?;
+
+      tracing::info!("{tenser}");
+
+      let vector: Vec<Option<f32>> = tenser.to_vec1()?.into_iter().map(|f| Some(f)).collect();
+
+      tracing::info!("{}", vector.len());
+
+      let runtime = tokio::runtime::Runtime::new()?;
+
+      runtime.block_on(async {
+        let db = connect(&config.lancedb_path).await?;
+
+        let tables = db.table_names().await?;
+
+        let table_name = "my_table".to_string();
+
+        if tables.contains(&table_name) {
+          db.drop_table(&table_name).await?;
+        }
+
+        let schema = Arc::new(Schema::new(vec![
+          Field::new("id", DataType::Int32, false),
+          Field::new("text", DataType::Utf8, true),
+          Field::new(
+            "vector",
+            DataType::FixedSizeList(
+              Arc::new(Field::new("item", DataType::Float32, true)),
+              DIM as i32,
+            ),
+            true,
+          ),
+        ]));
+
+        let batches = RecordBatchIterator::new(vec![], schema.clone());
+
+        let tbl = db.create_table("my_table", Box::new(batches), None).await?;
+
+        let embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&sentences)?.to_vec2()?;
+
+        // let embeddings: Vec<Vec<f32>> = sentences
+        //   .into_iter()
+        //   .filter_map(|s| bert_model.embedding(s).ok())
+        //   .filter_map(|t| t.flatten_all().ok())
+        //   .filter_map(|t| t.to_vec1::<f32>().ok())
+        //   .collect();
+
+        let query = embeddings[2].clone();
+
+        let vectors: Vec<Option<Vec<Option<f32>>>> = embeddings
+          .into_iter()
+          .map(|t| Some(t.into_iter().map(|f| Some(f)).collect()))
+          .collect();
+
+        for i in 0..vectors.len() {
+          tracing::info!("{}", vectors[i].clone().unwrap().len())
+        }
+
+        let batches = RecordBatchIterator::new(
+          vec![RecordBatch::try_new(
+            schema.clone(),
+            vec![
+              Arc::new(Int32Array::from_iter_values(0..sentences.len() as i32)),
+              Arc::new(StringArray::from(
+                sentences
+                  .into_iter()
+                  .map(|s| Some(s))
+                  .collect::<Vec<Option<&str>>>(),
+              )),
+              Arc::new(
+                FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(vectors, DIM as i32),
+              ),
+            ],
+          )?]
+          .into_iter()
+          .map(Ok),
+          schema.clone(),
+        );
+
+        tbl.add(Box::new(batches), None).await?;
+
+        let result = tbl
+          .search(&query)
+          .limit(2)
+          .execute_stream()
+          .await?
+          .try_collect::<Vec<_>>()
+          .await?;
+
+        tracing::info!("{:?}", result);
+
+        Ok::<(), anyhow::Error>(())
+      })?;
     }
   }
 

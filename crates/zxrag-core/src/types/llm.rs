@@ -1,6 +1,5 @@
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
-use dyn_clone::DynClone;
 use futures::Stream;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -14,15 +13,13 @@ use crate::util::eos_token;
 
 const MAX_SEQ_LEN: usize = 4096;
 
-pub trait LlmModel: DynClone {
+pub trait LlmModel: Send + Sync {
   fn id(&self) -> ModelId;
   fn engine(&self) -> ModelEngine;
   fn tokenizer(&self) -> &Tokenizer;
   fn device(&self) -> &Device;
   fn forward(&mut self, x: &Tensor, index_pos: usize) -> anyhow::Result<Tensor>;
 }
-
-dyn_clone::clone_trait_object!(LlmModel);
 
 pub struct TextGenerationSetting {
   pub temperature: f64,
