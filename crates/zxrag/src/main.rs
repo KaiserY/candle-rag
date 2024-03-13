@@ -100,7 +100,7 @@ fn main() -> Result<(), anyhow::Error> {
         sample_len: 16,
         // prompt: "<s>[INST] Hello! [/INST]".to_string(),
         // prompt: "<|user|>\nHello!</s>\n<|assistant|>".to_string(),
-        prompt: "Instruct: Hello!\nOutput:".to_string(),
+        prompt: "Alice: Hello!\nBob: ".to_string(),
       };
 
       let mut text_gen = get_text_gen(text_gen_setting)?;
