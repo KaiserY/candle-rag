@@ -54,14 +54,15 @@ impl Model {
     })
   }
 
-  pub fn embedding_batch(&mut self, prompts: &[&str]) -> anyhow::Result<Tensor> {
+  pub fn embedding_batch(&self, prompts: &[&str]) -> anyhow::Result<Tensor> {
     tracing::info!("id={}", self.id);
     tracing::info!("engine={}", self.engine);
 
     let start = std::time::Instant::now();
 
-    let tokenizer = self
-      .tokenizer
+    let mut tokenizer = self.tokenizer.clone();
+
+    tokenizer
       .with_padding(Some(PaddingParams {
         strategy: tokenizers::PaddingStrategy::Fixed(16),
         ..Default::default()

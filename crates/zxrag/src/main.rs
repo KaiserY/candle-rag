@@ -11,9 +11,10 @@ use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use vectordb::connect;
 use zxrag_backend::run_backend;
-use zxrag_core::models::bert::Model as BertModel;
 use zxrag_core::types::conf::{init_backend_conf, BackendConf};
-use zxrag_core::types::handle::{get_text_gen, set_llm_model_handle};
+use zxrag_core::types::handle::{
+  get_embedding_model, get_text_gen, set_embedding_model_handle, set_llm_model_handle,
+};
 use zxrag_core::types::llm::TextGenerationSetting;
 
 #[derive(Debug, Default, Args)]
@@ -88,26 +89,29 @@ fn main() -> Result<(), anyhow::Error> {
         .without_time()
         .init();
 
-      // set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
+      set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
 
-      // let text_gen_setting = TextGenerationSetting {
-      //   temperature: 0.8,
-      //   top_p: None,
-      //   seed: 299792458,
-      //   repeat_penalty: 1.1,
-      //   repeat_last_n: 64,
-      //   sample_len: 16,
-      //   prompt: "<s>[INST] Hello! [/INST]".to_string(),
-      //   // prompt: "<|user|>\nHello!</s>\n<|assistant|>".to_string(),
-      // };
+      let text_gen_setting = TextGenerationSetting {
+        temperature: 0.8,
+        top_p: None,
+        seed: 299792458,
+        repeat_penalty: 1.1,
+        repeat_last_n: 64,
+        sample_len: 16,
+        // prompt: "<s>[INST] Hello! [/INST]".to_string(),
+        // prompt: "<|user|>\nHello!</s>\n<|assistant|>".to_string(),
+        prompt: "Instruct: Hello!\nOutput:".to_string(),
+      };
 
-      // let mut text_gen = get_text_gen(text_gen_setting)?;
+      let mut text_gen = get_text_gen(text_gen_setting)?;
 
-      // let output = text_gen.generate()?;
+      let output = text_gen.generate()?;
 
-      // tracing::info!("{output}");
+      tracing::info!("{output}");
 
-      let mut bert_model = BertModel::new(&config.embedding_conf)?;
+      set_embedding_model_handle(config.embedding_conf.model_id, &config.embedding_conf)?;
+
+      let bert_model = get_embedding_model(config.embedding_conf.model_id)?;
 
       let sentences = [
         "The cat sits outside",
@@ -130,7 +134,7 @@ fn main() -> Result<(), anyhow::Error> {
 
       tracing::info!("{tenser}");
 
-      let vector: Vec<Option<f32>> = tenser.to_vec1()?.into_iter().map(|f| Some(f)).collect();
+      let vector: Vec<Option<f32>> = tenser.to_vec1()?.into_iter().map(Some).collect();
 
       tracing::info!("{}", vector.len());
 
@@ -166,22 +170,15 @@ fn main() -> Result<(), anyhow::Error> {
 
         let embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&sentences)?.to_vec2()?;
 
-        // let embeddings: Vec<Vec<f32>> = sentences
-        //   .into_iter()
-        //   .filter_map(|s| bert_model.embedding(s).ok())
-        //   .filter_map(|t| t.flatten_all().ok())
-        //   .filter_map(|t| t.to_vec1::<f32>().ok())
-        //   .collect();
-
         let query = embeddings[2].clone();
 
         let vectors: Vec<Option<Vec<Option<f32>>>> = embeddings
           .into_iter()
-          .map(|t| Some(t.into_iter().map(|f| Some(f)).collect()))
+          .map(|t| Some(t.into_iter().map(Some).collect()))
           .collect();
 
-        for i in 0..vectors.len() {
-          tracing::info!("{}", vectors[i].clone().unwrap().len())
+        for item in &vectors {
+          tracing::info!("{}", item.as_ref().unwrap().len())
         }
 
         let batches = RecordBatchIterator::new(
@@ -192,7 +189,7 @@ fn main() -> Result<(), anyhow::Error> {
               Arc::new(StringArray::from(
                 sentences
                   .into_iter()
-                  .map(|s| Some(s))
+                  .map(Some)
                   .collect::<Vec<Option<&str>>>(),
               )),
               Arc::new(
