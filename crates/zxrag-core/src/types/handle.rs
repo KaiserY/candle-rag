@@ -44,7 +44,7 @@ pub fn set_llm_model_handle(model_id: ModelId, conf: &LlmConf) -> anyhow::Result
 pub fn get_text_gen(setting: TextGenerationSetting) -> anyhow::Result<TextGeneration> {
   let text_gen = match LLM_MODEL_HANDLE
     .get()
-    .ok_or(anyhow::anyhow!("Get LLM_MODEL_HANDLE failed"))?
+    .ok_or(anyhow::anyhow!("get_text_gen failed"))?
   {
     LlmModelHandle::LlamaCpp(model) => TextGeneration::new(Box::new(model.clone()), setting)?,
     LlmModelHandle::Phi(model) => TextGeneration::new(Box::new(model.clone()), setting)?,
@@ -68,7 +68,7 @@ pub fn get_embedding_model(model_id: ModelId) -> anyhow::Result<Arc<BertModel>> 
 
   let model = EMBEDDING_MODEL_HANDLE
     .get()
-    .ok_or(anyhow::anyhow!("set_embedding_model_handle failed"))?;
+    .ok_or(anyhow::anyhow!("get_embedding_model failed"))?;
 
   Ok(model.clone())
 }

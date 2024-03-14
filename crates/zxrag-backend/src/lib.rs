@@ -13,6 +13,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 use zxrag_core::types::conf::BackendConf;
 
+use crate::controller::knowledge_base_controller;
 use crate::controller::openai_controller;
 
 pub mod controller;
@@ -40,10 +41,16 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     .allow_headers(Any)
     .allow_origin(Any);
 
-  let knowledge_base_routes = Router::new().route(
-    "/databases",
-    get(openai_controller::chat_completions).post(openai_controller::chat_completions),
-  );
+  let knowledge_base_routes = Router::new()
+    .route(
+      "/tables",
+      get(knowledge_base_controller::list_databases)
+        .post(knowledge_base_controller::create_databases),
+    )
+    .route(
+      "/:table_id/summaries",
+      post(knowledge_base_controller::create_databases),
+    );
 
   let v1_routes = Router::new()
     .route(

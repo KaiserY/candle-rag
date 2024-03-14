@@ -19,6 +19,8 @@ tracing = { workspace = true }
 futures = { workspace = true }
 dyn-clone = { workspace = true }
 serde_json = { workspace = true }
+arrow-schema = { workspace = true }
+arrow-array = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
