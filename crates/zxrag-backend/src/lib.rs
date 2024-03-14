@@ -40,10 +40,19 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     .allow_headers(Any)
     .allow_origin(Any);
 
-  let v1_routes = Router::new().route(
-    "/chat/completions",
-    post(openai_controller::chat_completions),
+  let knowledge_base_routes = Router::new().route(
+    "/databases",
+    get(openai_controller::chat_completions).post(openai_controller::chat_completions),
   );
+
+  let v1_routes = Router::new()
+    .route(
+      "/chat/completions",
+      post(openai_controller::chat_completions),
+    )
+    .route("/embeddings", post(openai_controller::embeddings))
+    .route("/models", post(openai_controller::models))
+    .nest("/knowledge_base", knowledge_base_routes);
 
   let app = Router::new()
     .nest("/v1", v1_routes)

@@ -9,7 +9,6 @@ use std::sync::Arc;
 use time::format_description::well_known;
 use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
-use vectordb::connect;
 use zxrag_backend::run_backend;
 use zxrag_core::types::conf::{init_backend_conf, BackendConf};
 use zxrag_core::types::handle::{
@@ -75,6 +74,8 @@ fn main() -> Result<(), anyhow::Error> {
 
       set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
 
+      set_embedding_model_handle(config.embedding_conf.model_id, &config.embedding_conf)?;
+
       run_backend(config)?;
     }
     Commands::Cli(cli_config) => {
@@ -126,22 +127,10 @@ fn main() -> Result<(), anyhow::Error> {
 
       const DIM: usize = 1024;
 
-      let tenser = bert_model.embedding_batch(&["A man is playing guitar"])?;
-
-      tracing::info!("{tenser}");
-
-      let tenser = tenser.flatten_all()?;
-
-      tracing::info!("{tenser}");
-
-      let vector: Vec<Option<f32>> = tenser.to_vec1()?.into_iter().map(Some).collect();
-
-      tracing::info!("{}", vector.len());
-
       let runtime = tokio::runtime::Runtime::new()?;
 
       runtime.block_on(async {
-        let db = connect(&config.lancedb_path).await?;
+        let db = vectordb::connect(&config.lancedb_path).await?;
 
         let tables = db.table_names().await?;
 
@@ -168,7 +157,7 @@ fn main() -> Result<(), anyhow::Error> {
 
         let tbl = db.create_table("my_table", Box::new(batches), None).await?;
 
-        let embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&sentences)?.to_vec2()?;
+        let embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&sentences)?;
 
         let query = embeddings[2].clone();
 

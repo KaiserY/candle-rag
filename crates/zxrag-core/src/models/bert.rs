@@ -54,7 +54,7 @@ impl Model {
     })
   }
 
-  pub fn embedding_batch(&self, prompts: &[&str]) -> anyhow::Result<Tensor> {
+  pub fn embedding_batch(&self, prompts: &[&str]) -> anyhow::Result<Vec<Vec<f32>>> {
     tracing::info!("id={}", self.id);
     tracing::info!("engine={}", self.engine);
 
@@ -100,7 +100,7 @@ impl Model {
 
     tracing::info!("Took {:?}", start.elapsed());
 
-    Ok(embeddings)
+    Ok(embeddings.to_vec2()?)
   }
 }
 

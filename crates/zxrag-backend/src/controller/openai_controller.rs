@@ -8,12 +8,12 @@ use std::borrow::Cow;
 use std::collections::HashMap;
 use std::fmt::Write;
 use std::fmt::{Display, Formatter};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
 use tinyvec::{tiny_vec, TinyVec};
 use tokio_stream::StreamExt;
 use uuid::Uuid;
-use zxrag_core::types::handle::get_text_gen;
+use zxrag_core::types::handle::{get_embedding_model, get_text_gen};
 use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
 use zxrag_core::types::model::ModelId;
 
@@ -95,6 +95,68 @@ pub async fn chat_completions(
   };
 
   Ok(response)
+}
+
+pub async fn embeddings(
+  State(state): State<BackendState>,
+  Json(req): Json<CreateEmbeddingRequest<'_>>,
+) -> Result<impl IntoResponse, BackendError> {
+  let input = req.input.either(
+    move |s| vec![s.to_string()],
+    move |v| v.iter().map(move |s| s.to_string()).collect(),
+  );
+
+  let bert_model = get_embedding_model(state.config.embedding_conf.model_id)?;
+
+  let prompts: Vec<&str> = input.iter().map(|s| s.as_str()).collect();
+
+  let mut embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&prompts)?;
+
+  Ok(Json(EmbeddingResponse {
+    object: "list".to_string(),
+    embeddings: embeddings
+      .drain(..)
+      .enumerate()
+      .map(move |(index, embedding)| Embedding {
+        object: "embedding".to_string(),
+        embedding,
+        index,
+      })
+      .collect(),
+    model: req.model.to_string(),
+    usage: EmbeddingsUsage {
+      prompt_tokens: 0,
+      total_tokens: 0,
+    },
+  }))
+}
+
+pub async fn models(State(state): State<BackendState>) -> Result<impl IntoResponse, BackendError> {
+  let models = vec![
+    ModelDescription {
+      id: state.config.llm_conf.model_id.to_string(),
+      created: SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs(),
+      object: "model".to_string(),
+      owned_by: "".to_string(),
+    },
+    ModelDescription {
+      id: state.config.embedding_conf.model_id.to_string(),
+      created: SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs(),
+      object: "model".to_string(),
+      owned_by: "".to_string(),
+    },
+  ];
+
+  Ok(Json(ModelsResponse {
+    object: "list".to_string(),
+    data: models,
+  }))
 }
 
 #[derive(Debug, Clone)]
@@ -430,4 +492,48 @@ pub struct ChatCompletionChunkChoice<'a> {
 pub struct ChatCompletionChunkDelta<'a> {
   pub content: Option<Cow<'a, str>>,
   pub role: Option<Cow<'a, str>>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct CreateEmbeddingRequest<'a> {
+  #[serde(with = "either::serde_untagged")]
+  pub input: Either<Cow<'a, str>, Vec<Cow<'a, str>>>,
+  pub model: Cow<'a, str>,
+  pub encoding_format: Option<Cow<'a, str>>,
+  pub dimensions: Option<usize>,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct EmbeddingResponse {
+  pub object: String,
+  pub embeddings: Vec<Embedding>,
+  pub model: String,
+  pub usage: EmbeddingsUsage,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Embedding {
+  pub object: String,
+  pub embedding: Vec<f32>,
+  pub index: usize,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct EmbeddingsUsage {
+  pub prompt_tokens: usize,
+  pub total_tokens: usize,
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+pub struct ModelsResponse {
+  pub object: String,
+  pub data: Vec<ModelDescription>,
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+pub struct ModelDescription {
+  pub id: String,
+  pub created: u64,
+  pub object: String,
+  pub owned_by: String,
 }

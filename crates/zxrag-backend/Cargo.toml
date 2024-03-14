@@ -27,3 +27,7 @@ derive_more = { workspace = true }
 futures = { workspace = true }
 uuid = { workspace = true }
 tinyvec = { workspace = true }
+vectordb = { workspace = true }
+arrow-schema = { workspace = true }
+arrow-array = { workspace = true }
+redb = { workspace = true }
