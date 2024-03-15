@@ -291,16 +291,16 @@ pub struct CreateEmbeddingRequest<'a> {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct EmbeddingResponse {
-  pub object: String,
-  pub embeddings: Vec<Embedding>,
-  pub model: String,
+pub struct EmbeddingResponse<'a> {
+  pub object: Cow<'a, str>,
+  pub embeddings: Vec<Embedding<'a>>,
+  pub model: Cow<'a, str>,
   pub usage: EmbeddingsUsage,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct Embedding {
-  pub object: String,
+pub struct Embedding<'a> {
+  pub object: Cow<'a, str>,
   pub embedding: Vec<f32>,
   pub index: usize,
 }
@@ -312,17 +312,17 @@ pub struct EmbeddingsUsage {
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
-pub struct ModelsResponse {
-  pub object: String,
-  pub data: Vec<ModelDescription>,
+pub struct ModelsResponse<'a> {
+  pub object: Cow<'a, str>,
+  pub data: Vec<Model<'a>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
-pub struct ModelDescription {
-  pub id: String,
+pub struct Model<'a> {
+  pub id: Cow<'a, str>,
   pub created: u64,
-  pub object: String,
-  pub owned_by: String,
+  pub object: Cow<'a, str>,
+  pub owned_by: Cow<'a, str>,
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]

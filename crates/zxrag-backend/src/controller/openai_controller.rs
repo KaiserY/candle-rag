@@ -108,17 +108,17 @@ pub async fn embeddings(
   let mut embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&prompts)?;
 
   Ok(Json(EmbeddingResponse {
-    object: "list".to_string(),
+    object: Cow::Owned("list".to_string()),
     embeddings: embeddings
       .drain(..)
       .enumerate()
       .map(move |(index, embedding)| Embedding {
-        object: "embedding".to_string(),
+        object: Cow::Owned("embedding".to_string()),
         embedding,
         index,
       })
       .collect(),
-    model: req.model.to_string(),
+    model: Cow::Owned(req.model.to_string()),
     usage: EmbeddingsUsage {
       prompt_tokens: 0,
       total_tokens: 0,
@@ -128,28 +128,28 @@ pub async fn embeddings(
 
 pub async fn models(State(state): State<BackendState>) -> Result<impl IntoResponse, BackendError> {
   let models = vec![
-    ModelDescription {
-      id: state.config.llm_conf.model_id.to_string(),
+    Model {
+      id: Cow::Owned(state.config.llm_conf.model_id.to_string()),
       created: SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs(),
-      object: "model".to_string(),
-      owned_by: "llm".to_string(),
+      object: Cow::Owned("model".to_string()),
+      owned_by: Cow::Owned("llm".to_string()),
     },
-    ModelDescription {
-      id: state.config.embedding_conf.model_id.to_string(),
+    Model {
+      id: Cow::Owned(state.config.embedding_conf.model_id.to_string()),
       created: SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_secs(),
-      object: "model".to_string(),
-      owned_by: "embedding".to_string(),
+      object: Cow::Owned("model".to_string()),
+      owned_by: Cow::Owned("embedding".to_string()),
     },
   ];
 
   Ok(Json(ModelsResponse {
-    object: "list".to_string(),
+    object: Cow::Owned("list".to_string()),
     data: models,
   }))
 }

@@ -53,7 +53,7 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     )
     .route(
       "/:table_id/chat/completions",
-      post(knowledge_base_controller::create_tables),
+      post(knowledge_base_controller::create_chat_completion),
     );
 
   let v1_routes = Router::new()
