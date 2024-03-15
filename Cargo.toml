@@ -21,7 +21,7 @@ hf-hub = "0.3.2"
 serde = { version = "1.0.197", features = ["derive"] }
 serde_json = "1.0.114"
 tokio = { version = "1.36.0", features = ["full"] }
-tokio-stream = "0.1.14"
+tokio-stream = "0.1.15"
 config = "0.14.0"
 tracing = "0.1.40"
 tracing-subscriber = { version = "0.3.18", features = [
@@ -35,7 +35,7 @@ tracing-appender = "0.2.3"
 tracing-chrome = "0.7.1"
 time = { version = "0.3.34", features = ["local-offset"] }
 strum = { version = "0.26.2", features = ["derive"] }
-axum = { version = "0.7.4", features = ["tracing"] }
+axum = { version = "0.7.4", features = ["tracing", "multipart"] }
 axum-extra = { version = "0.9.2", features = ["cookie"] }
 rust-embed = { version = "8.3.0", features = ["compression"] }
 tower-http = { version = "0.5.2", features = [
@@ -60,3 +60,4 @@ dyn-clone = "1.0.17"
 arrow-schema = "50.0.0"
 arrow-array = "50.0.0"
 redb = "1.5.0"
+opendal = "0.45.1"

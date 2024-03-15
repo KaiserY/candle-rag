@@ -11,6 +11,7 @@ pub struct BackendConf {
   pub embedding_conf: EmbeddingConf,
   pub lancedb_path: String,
   pub redb_path: String,
+  pub opendal_path: String,
 }
 
 #[derive(Debug, Default, Deserialize, Serialize)]
@@ -59,6 +60,7 @@ pub fn init_backend_conf(cli_conf_path: &str) -> Result<BackendConf, anyhow::Err
     .set_default("embedding_conf.tokenizer_path", "huggingface")?
     .set_default("lancedb_path", "lancedb")?
     .set_default("redb_path", "kb.redb")?
+    .set_default("opendal_path", "opendal")?
     .add_source(config::File::with_name("zhixing.json").required(false))
     .add_source(config::File::with_name(cli_conf_path).required(false))
     .add_source(config::Environment::with_prefix("ZX"))

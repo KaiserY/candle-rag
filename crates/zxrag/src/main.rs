@@ -195,6 +195,7 @@ fn main() -> Result<(), anyhow::Error> {
 
         let result = tbl
           .search(&query)
+          // .query().filter("id = 3")
           .limit(2)
           .execute_stream()
           .await?

@@ -2,7 +2,7 @@ use axum::{
   body::Body,
   http::{header, Method, StatusCode, Uri},
   response::{IntoResponse, Response},
-  routing::{get, post},
+  routing::{delete, get, post},
   Router,
 };
 use rust_embed::RustEmbed;
@@ -18,6 +18,7 @@ use crate::controller::openai_controller;
 
 pub mod controller;
 pub mod error;
+pub mod types;
 
 #[derive(RustEmbed)]
 #[folder = "../../zxrag-ui/dist/"]
@@ -44,21 +45,29 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
   let knowledge_base_routes = Router::new()
     .route(
       "/tables",
-      get(knowledge_base_controller::list_databases)
-        .post(knowledge_base_controller::create_databases),
+      get(knowledge_base_controller::list_tables).post(knowledge_base_controller::create_tables),
     )
     .route(
-      "/:table_id/summaries",
-      post(knowledge_base_controller::create_databases),
+      "/:table_id",
+      delete(knowledge_base_controller::delete_table),
+    )
+    .route(
+      "/:table_id/chat/completions",
+      post(knowledge_base_controller::create_tables),
     );
 
   let v1_routes = Router::new()
     .route(
       "/chat/completions",
-      post(openai_controller::chat_completions),
+      post(openai_controller::create_chat_completion),
     )
     .route("/embeddings", post(openai_controller::embeddings))
     .route("/models", post(openai_controller::models))
+    .route(
+      "/files",
+      post(openai_controller::upload_file).get(openai_controller::list_files),
+    )
+    .route("/files/:file_id", delete(openai_controller::delete_file))
     .nest("/knowledge_base", knowledge_base_routes);
 
   let app = Router::new()

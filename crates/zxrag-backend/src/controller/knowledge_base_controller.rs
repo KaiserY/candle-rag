@@ -1,34 +1,16 @@
-use arrow_array::{
-  types::Float32Type, FixedSizeListArray, Int32Array, RecordBatch, RecordBatchIterator, StringArray,
-};
-use arrow_schema::{DataType, Field, Schema};
-use axum::extract::State;
-use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
-use derive_more::{Deref, DerefMut, From};
-use either::Either;
-use futures::{Stream, TryStream};
-use redb::{Database, ReadableTable, TableDefinition};
+use arrow_array::RecordBatchIterator;
+use axum::extract::{Path, State};
+use axum::response::{IntoResponse, Json};
 use serde::{Deserialize, Serialize};
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use time::OffsetDateTime;
-use tinyvec::{tiny_vec, TinyVec};
-use tokio_stream::StreamExt;
-use uuid::Uuid;
-use zxrag_core::types::embedding::{get_embedding_schema, EMBEDDING_SCHEMA};
-use zxrag_core::types::handle::{get_embedding_model, get_text_gen};
-use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
-use zxrag_core::types::model::ModelId;
+use zxrag_core::types::lancedb::get_embedding_schema;
 
 use crate::error::BackendError;
+use crate::types::openai::ChatCompletionRequest;
 use crate::BackendState;
 
-const TABLE: TableDefinition<&str, &str> = TableDefinition::new("my_data");
-
-pub async fn create_databases(
+pub async fn create_tables(
   State(state): State<BackendState>,
-  Json(req): Json<CreateDatabaseRequest>,
+  Json(req): Json<CreateTableRequest>,
 ) -> Result<impl IntoResponse, BackendError> {
   let db = vectordb::connect(&state.config.lancedb_path)
     .await
@@ -36,10 +18,8 @@ pub async fn create_databases(
 
   let tables = db.table_names().await.map_err(|e| anyhow::anyhow!(e))?;
 
-  let table_name = "my_table".to_string();
-
-  if tables.contains(&table_name) {
-    Ok(Json(CreateDatabaseResponse { name: req.name }))
+  if tables.contains(&req.name) {
+    Ok(Json(CreateTableResponse { name: req.name }))
   } else {
     let schema = get_embedding_schema()?;
 
@@ -52,11 +32,11 @@ pub async fn create_databases(
 
     tracing::info!("{}", tbl);
 
-    Ok(Json(CreateDatabaseResponse { name: req.name }))
+    Ok(Json(CreateTableResponse { name: req.name }))
   }
 }
 
-pub async fn list_databases(
+pub async fn list_tables(
   State(state): State<BackendState>,
 ) -> Result<impl IntoResponse, BackendError> {
   let db = vectordb::connect(&state.config.lancedb_path)
@@ -67,28 +47,65 @@ pub async fn list_databases(
 
   let data = tables
     .into_iter()
-    .map(|t| DatabaseDescription { name: t })
+    .map(|t| TableDescription { name: t })
     .collect();
 
-  Ok(Json(ListDatabaseResponse { data }))
+  Ok(Json(ListTableResponse { data }))
+}
+
+pub async fn delete_table(
+  State(state): State<BackendState>,
+  Json(req): Json<DeleteTableRequest>,
+) -> Result<impl IntoResponse, BackendError> {
+  let db = vectordb::connect(&state.config.lancedb_path)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let tables = db.table_names().await.map_err(|e| anyhow::anyhow!(e))?;
+
+  if tables.contains(&req.name) {
+    db.drop_table(&req.name)
+      .await
+      .map_err(|e| anyhow::anyhow!(e))?;
+  }
+
+  Ok(Json(DeleteTableResponse { name: req.name }))
+}
+
+pub async fn create_chat_completion(
+  State(_state): State<BackendState>,
+  Path(_table_id): Path<String>,
+  Json(_req): Json<ChatCompletionRequest<'_>>,
+) -> Result<impl IntoResponse, BackendError> {
+  Ok(())
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct CreateDatabaseRequest {
+pub struct CreateTableRequest {
   name: String,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct CreateDatabaseResponse {
+pub struct CreateTableResponse {
   name: String,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ListDatabaseResponse {
-  data: Vec<DatabaseDescription>,
+pub struct ListTableResponse {
+  data: Vec<TableDescription>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct DatabaseDescription {
+pub struct TableDescription {
+  name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DeleteTableRequest {
+  name: String,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DeleteTableResponse {
   name: String,
 }
