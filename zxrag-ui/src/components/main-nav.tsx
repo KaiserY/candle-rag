@@ -1,6 +1,22 @@
 import { Link, useLocation } from "react-router-dom";
+import * as React from "react";
 
 import { cn } from "@/lib/utils";
+import {
+	NavigationMenu,
+	NavigationMenuContent,
+	NavigationMenuItem,
+	NavigationMenuLink,
+	NavigationMenuList,
+	NavigationMenuTrigger,
+	navigationMenuTriggerStyle,
+} from "@/components/ui/navigation-menu";
+import {
+	Breadcrumb,
+	BreadcrumbItem,
+	BreadcrumbList,
+	BreadcrumbSeparator,
+} from "@/components/ui/breadcrumb";
 
 export function MainNav({
 	className,
@@ -13,32 +29,128 @@ export function MainNav({
 			className={cn("flex items-center space-x-4 lg:space-x-6 mx-6", className)}
 			{...props}
 		>
-			<Link
-				to="/chat"
-				className={`text-lg font-medium transition-colors px-4 rounded-full hover:text-primary ${
-					location.pathname === "/chat" || location.pathname === "/"
-						? " bg-muted"
-						: "text-muted-foreground"
-				}`}
-			>
-				Chat
-			</Link>
-			<Link
-				to="/knowledgebase"
-				className={`text-lg font-medium transition-colors px-4 rounded-full hover:text-primary ${
-					location.pathname === "/knowledgebase" ? " bg-muted" : "text-muted-foreground"
-				}`}
-			>
-				Knowledgebase
-			</Link>
-			<Link
-				to="/ocr"
-				className={`text-lg font-medium transition-colors px-4 rounded-full hover:text-primary ${
-					location.pathname === "/ocr" ? " bg-muted" : "text-muted-foreground"
-				}`}
-			>
-				OCR
-			</Link>
+			<NavigationMenu>
+				<NavigationMenuList>
+					<NavigationMenuItem>
+						<Link
+							to="/chat"
+							className={cn(
+								navigationMenuTriggerStyle(),
+								location.pathname === "/chat" || location.pathname === "/"
+									? "bg-accent text-accent-foreground"
+									: "",
+							)}
+						>
+							Chat
+						</Link>
+					</NavigationMenuItem>
+					<NavigationMenuItem>
+						<NavigationMenuTrigger
+							className={cn(
+								navigationMenuTriggerStyle(),
+								location.pathname.startsWith("/knowledgebase/")
+									? "bg-accent text-accent-foreground"
+									: "",
+							)}
+						>
+							<Breadcrumb>
+								<BreadcrumbList>
+									<BreadcrumbItem>Knowledge Base</BreadcrumbItem>
+									{location.pathname === "/knowledgebase/chat" && (
+										<>
+											<BreadcrumbSeparator />
+											<BreadcrumbItem>Chat</BreadcrumbItem>
+										</>
+									)}
+									{location.pathname === "/knowledgebase/embeddings" && (
+										<>
+											<BreadcrumbSeparator />
+											<BreadcrumbItem>Embeddings</BreadcrumbItem>
+										</>
+									)}
+									{location.pathname === "/knowledgebase/files" && (
+										<>
+											<BreadcrumbSeparator />
+											<BreadcrumbItem>Files</BreadcrumbItem>
+										</>
+									)}
+								</BreadcrumbList>
+							</Breadcrumb>
+						</NavigationMenuTrigger>
+						<NavigationMenuContent>
+							<ul className="grid w-[400px] gap-3 p-4 md:w-[500px] md:grid-cols-2 lg:w-[600px] ">
+								<li>
+									<NavigationMenuLink asChild>
+										<Link
+											to="/knowledgebase/chat"
+											className={cn(
+												"block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+												className,
+											)}
+										>
+											<div className="text-sm font-medium leading-none">
+												Chat
+											</div>
+											<p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+												Knowledge Base Chat
+											</p>
+										</Link>
+									</NavigationMenuLink>
+								</li>
+								<li>
+									<NavigationMenuLink asChild>
+										<Link
+											to="/knowledgebase/embeddings"
+											className={cn(
+												"block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+												className,
+											)}
+										>
+											<div className="text-sm font-medium leading-none">
+												Embeddings
+											</div>
+											<p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+												Knowledge Base Embeddings
+											</p>
+										</Link>
+									</NavigationMenuLink>
+								</li>
+								<li>
+									<NavigationMenuLink asChild>
+										<Link
+											to="/knowledgebase/files"
+											className={cn(
+												"block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
+												className,
+											)}
+										>
+											<div className="text-sm font-medium leading-none">
+												Files
+											</div>
+											<p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
+												Knowledge Base Files
+											</p>
+										</Link>
+									</NavigationMenuLink>
+								</li>
+							</ul>
+						</NavigationMenuContent>
+					</NavigationMenuItem>
+					<NavigationMenuItem>
+						<Link
+							to="/ocr"
+							className={cn(
+								navigationMenuTriggerStyle(),
+								location.pathname === "/ocr"
+									? "bg-accent text-accent-foreground"
+									: "",
+							)}
+						>
+							OCR
+						</Link>
+					</NavigationMenuItem>
+				</NavigationMenuList>
+			</NavigationMenu>
 		</nav>
 	);
 }

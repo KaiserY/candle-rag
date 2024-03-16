@@ -56,8 +56,8 @@ pub fn init_backend_conf(cli_conf_path: &str) -> Result<BackendConf, anyhow::Err
     .set_default("llm_conf.tokenizer_path", "")?
     .set_default("embedding_conf.model_id", "none")?
     .set_default("embedding_conf.model_engine", "huggingface")?
-    .set_default("embedding_conf.model_path", "huggingface")?
-    .set_default("embedding_conf.tokenizer_path", "huggingface")?
+    .set_default("embedding_conf.model_path", "")?
+    .set_default("embedding_conf.tokenizer_path", "")?
     .set_default("lancedb_path", "lancedb")?
     .set_default("redb_path", "kb.redb")?
     .set_default("opendal_path", "opendal")?

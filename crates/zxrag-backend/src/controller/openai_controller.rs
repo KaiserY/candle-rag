@@ -215,7 +215,7 @@ pub async fn list_files(
     data: files
       .into_iter()
       .map(|f| File {
-        id: Cow::Owned(f.name().to_string()),
+        id: Cow::Owned(Uuid::new_v4().to_string()),
         bytes: f.metadata().content_length(),
         created_at: SystemTime::now()
           .duration_since(UNIX_EPOCH)

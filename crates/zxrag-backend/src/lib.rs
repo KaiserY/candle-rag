@@ -68,7 +68,7 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
       post(openai_controller::upload_file).get(openai_controller::list_files),
     )
     .route("/files/:file_id", delete(openai_controller::delete_file))
-    .nest("/knowledge_base", knowledge_base_routes);
+    .nest("/knowledgebase", knowledge_base_routes);
 
   let app = Router::new()
     .nest("/v1", v1_routes)

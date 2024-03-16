@@ -15,7 +15,7 @@ candle-core = "0.4.1"
 candle-examples = "0.4.1"
 candle-nn = "0.4.1"
 candle-transformers = "0.4.1"
-clap = { version = "4.5.2", features = ["derive"] }
+clap = { version = "4.5.3", features = ["derive"] }
 tokenizers = { version = "0.15.2", default-features = false }
 hf-hub = "0.3.2"
 serde = { version = "1.0.197", features = ["derive"] }
@@ -32,7 +32,7 @@ tracing-subscriber = { version = "0.3.18", features = [
   "local-time",
 ] }
 tracing-appender = "0.2.3"
-tracing-chrome = "0.7.1"
+tracing-chrome = "0.7.2"
 time = { version = "0.3.34", features = ["local-offset"] }
 strum = { version = "0.26.2", features = ["derive"] }
 axum = { version = "0.7.4", features = ["tracing", "multipart"] }
@@ -51,7 +51,7 @@ hex = "0.4.3"
 either = { version = "1.10.0", features = ["serde"] }
 derive_more = "0.99.17"
 futures = "0.3.30"
-uuid = { version = "1.7.0", features = ["v4"] }
+uuid = { version = "1.7.0", features = ["v7"] }
 tinyvec = { version = "1.6.0", features = ["serde"] }
 pin-project = "1.1.5"
 bindgen_cuda = "0.1.4"
