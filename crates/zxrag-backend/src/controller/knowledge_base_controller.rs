@@ -1,21 +1,21 @@
 use arrow_array::RecordBatchIterator;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Path, State};
 use axum::response::{sse::Event, IntoResponse, Json, Sse};
-use opendal::services::Fs;
-use opendal::Operator;
+
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use time::OffsetDateTime;
 use tinyvec::tiny_vec;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
-use zxrag_core::types::handle::{get_embedding_model, get_text_gen};
+use zxrag_core::types::handle::get_text_gen;
 use zxrag_core::types::lancedb::get_embedding_schema;
 use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
+use zxrag_core::types::openai::*;
 
 use crate::error::BackendError;
-use crate::types::openai::*;
+use crate::openai_controller::ChatCompletionResponse;
 use crate::BackendState;
 
 pub async fn create_tables(

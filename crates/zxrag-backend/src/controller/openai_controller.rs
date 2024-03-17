@@ -1,7 +1,9 @@
 use axum::extract::{Multipart, Path, State};
-use axum::response::{sse::Event, IntoResponse, Json, Sse};
+use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
+use chrono::NaiveDateTime;
+use futures::{Stream, TryStream};
 use opendal::services::Fs;
-use opendal::Operator;
+use opendal::{Metakey, Operator};
 use std::borrow::Cow;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
@@ -10,9 +12,11 @@ use tokio_stream::StreamExt;
 use uuid::Uuid;
 use zxrag_core::types::handle::{get_embedding_model, get_text_gen};
 use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
+use zxrag_core::types::openai::*;
+use zxrag_core::types::sqlx::File as SqlxFile;
 
 use crate::error::BackendError;
-use crate::types::openai::*;
+
 use crate::BackendState;
 
 pub async fn create_chat_completion(
@@ -170,7 +174,8 @@ pub async fn upload_file(
     if name == "file" {
       let file_name = field
         .file_name()
-        .ok_or(anyhow::anyhow!("file_name not found"))?;
+        .ok_or(anyhow::anyhow!("file_name not found"))?
+        .to_string();
 
       let mut builder = Fs::default();
 
@@ -181,16 +186,35 @@ pub async fn upload_file(
         .finish();
 
       let mut w = op
-        .writer_with(file_name)
+        .writer_with(&file_name)
         .append(true)
         .await
         .map_err(|e| anyhow::anyhow!(e))?;
 
+      let mut bytes: i64 = 0;
+
       while let Some(chunk) = field.chunk().await.map_err(|e| anyhow::anyhow!(e))? {
+        bytes += chunk.len() as i64;
+
         w.write(chunk).await.map_err(|e| anyhow::anyhow!(e))?;
       }
 
       w.close().await.map_err(|e| anyhow::anyhow!(e))?;
+
+      sqlx::query(
+        r#"
+REPLACE INTO file ( filename, bytes, purpose, created_at, updated_at )
+VALUES ( ?, ?, ?, ?, ? )
+        "#,
+      )
+      .bind(file_name)
+      .bind(bytes)
+      .bind("fine-tune")
+      .bind(NaiveDateTime::default().and_utc().timestamp())
+      .bind(NaiveDateTime::default().and_utc().timestamp())
+      .execute(&state.pool.clone())
+      .await
+      .map_err(|e| anyhow::anyhow!(e))?;
     }
   }
 
@@ -204,11 +228,26 @@ pub async fn list_files(
 
   builder.root(&state.config.opendal_path);
 
+  let sqlx_files = sqlx::query_as::<_, SqlxFile>(
+    r#"
+SELECT * FROM file;
+    "#,
+  )
+  .fetch_all(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  tracing::info!("{:?}", sqlx_files);
+
   let op: Operator = Operator::new(builder)
     .map_err(|e| anyhow::anyhow!(e))?
     .finish();
 
-  let files = op.list("/").await.map_err(|e| anyhow::anyhow!(e))?;
+  let files = op
+    .list_with("/")
+    .metakey(Metakey::ContentLength | Metakey::LastModified)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
 
   Ok(Json(ListFilesResponse {
     object: "list".to_string(),
@@ -217,10 +256,11 @@ pub async fn list_files(
       .map(|f| File {
         id: Cow::Owned(Uuid::new_v4().to_string()),
         bytes: f.metadata().content_length(),
-        created_at: SystemTime::now()
-          .duration_since(UNIX_EPOCH)
-          .unwrap_or_default()
-          .as_secs(),
+        created_at: f
+          .metadata()
+          .last_modified()
+          .map(|d| d.timestamp())
+          .unwrap_or_default(),
         filename: Cow::Owned(f.name().to_string()),
         object: Cow::Owned("file".to_string()),
         purpose: Cow::Owned("embeddings".to_string()),
@@ -244,4 +284,25 @@ pub async fn delete_file(
   op.delete(&file_id).await.map_err(|e| anyhow::anyhow!(e))?;
 
   Ok(())
+}
+
+pub enum ChatCompletionResponse<'a, S>
+where
+  S: TryStream<Ok = Event> + Send + 'static,
+{
+  Stream(Sse<S>),
+  Full(Json<ChatCompletion<'a>>),
+}
+
+impl<'a, S, E> IntoResponse for ChatCompletionResponse<'a, S>
+where
+  S: Stream<Item = Result<Event, E>> + Send + 'static,
+  E: Into<axum::BoxError>,
+{
+  fn into_response(self) -> Response {
+    match self {
+      ChatCompletionResponse::Stream(stream) => stream.into_response(),
+      ChatCompletionResponse::Full(full) => full.into_response(),
+    }
+  }
 }

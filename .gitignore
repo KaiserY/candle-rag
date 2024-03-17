@@ -19,3 +19,4 @@ zxrag.toml
 .vscode
 lancedb
 opendal
+sqlite.db*

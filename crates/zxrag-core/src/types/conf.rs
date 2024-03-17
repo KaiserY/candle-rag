@@ -10,7 +10,7 @@ pub struct BackendConf {
   pub llm_conf: LlmConf,
   pub embedding_conf: EmbeddingConf,
   pub lancedb_path: String,
-  pub redb_path: String,
+  pub database_url: String,
   pub opendal_path: String,
 }
 
@@ -59,7 +59,7 @@ pub fn init_backend_conf(cli_conf_path: &str) -> Result<BackendConf, anyhow::Err
     .set_default("embedding_conf.model_path", "")?
     .set_default("embedding_conf.tokenizer_path", "")?
     .set_default("lancedb_path", "lancedb")?
-    .set_default("redb_path", "kb.redb")?
+    .set_default("database_url", "sqlite:./sqlite.db")?
     .set_default("opendal_path", "opendal")?
     .add_source(config::File::with_name("zhixing.json").required(false))
     .add_source(config::File::with_name(cli_conf_path).required(false))

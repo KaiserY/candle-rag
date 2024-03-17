@@ -5,17 +5,6 @@ import { columns } from "@/components/knowledgebase-files-page/data-table-column
 import { File } from "@/schema";
 import { openai } from "@/openai";
 
-const aa = [
-	{
-		id: "TASK-8782",
-		filename: "aa.txt",
-		bytes: 111,
-		created_at: 222,
-		object: "file",
-		purpose: "embedding",
-	},
-];
-
 export function KnowledgebaseFilesPage() {
 	const [files, setFiles] = useState<File[]>([]);
 
@@ -33,7 +22,7 @@ export function KnowledgebaseFilesPage() {
 
 	return (
 		<>
-			<div className="container h-full py-6">
+			<div className="container h-full py-6 overflow-hidden">
 				<DataTable data={files} columns={columns} />
 			</div>
 		</>

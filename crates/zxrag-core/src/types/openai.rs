@@ -1,7 +1,5 @@
-use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
 use derive_more::{Deref, DerefMut, From};
 use either::Either;
-use futures::{Stream, TryStream};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -9,7 +7,7 @@ use std::fmt::Write;
 use std::fmt::{Display, Formatter};
 use tinyvec::TinyVec;
 
-use zxrag_core::types::model::ModelId;
+use crate::types::model::ModelId;
 
 #[derive(Serialize, Deserialize)]
 pub struct ChatCompletionRequest<'a> {
@@ -212,27 +210,6 @@ pub struct FunctionStub<'a> {
   pub parameters: serde_json::Value,
 }
 
-pub enum ChatCompletionResponse<'a, S>
-where
-  S: TryStream<Ok = Event> + Send + 'static,
-{
-  Stream(Sse<S>),
-  Full(Json<ChatCompletion<'a>>),
-}
-
-impl<'a, S, E> IntoResponse for ChatCompletionResponse<'a, S>
-where
-  S: Stream<Item = Result<Event, E>> + Send + 'static,
-  E: Into<axum::BoxError>,
-{
-  fn into_response(self) -> Response {
-    match self {
-      ChatCompletionResponse::Stream(stream) => stream.into_response(),
-      ChatCompletionResponse::Full(full) => full.into_response(),
-    }
-  }
-}
-
 #[derive(Serialize, Deserialize)]
 pub struct ChatCompletion<'a> {
   pub id: Cow<'a, str>,
@@ -335,7 +312,7 @@ pub struct ListFilesResponse<'a> {
 pub struct File<'a> {
   pub id: Cow<'a, str>,
   pub bytes: u64,
-  pub created_at: u64,
+  pub created_at: i64,
   pub filename: Cow<'a, str>,
   pub object: Cow<'a, str>,
   pub purpose: Cow<'a, str>,

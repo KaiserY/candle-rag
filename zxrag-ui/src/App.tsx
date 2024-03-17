@@ -10,6 +10,7 @@ import { LayoutPage } from "@/pages/layout-page";
 import { ChatPage } from "@/pages/chat-page";
 import { KnowledgebasePage } from "@/pages/knowledgebase-page";
 import { KnowledgebaseFilesPage } from "@/pages/knowledgebase-files-page";
+import { KnowledgebaseEmbeddingsPage } from "@/pages/knowledgebase-embeddings-page";
 import { OCRPage } from "@/pages/ocr-page";
 import { Toaster } from "@/components/ui/toaster";
 import { ThemeProvider } from "@/components/theme-provider";
@@ -24,7 +25,7 @@ export default function App() {
 				<Route path="chat" element={<ChatPage />} />
 				<Route path="knowledgebase">
 					<Route path="chat" element={<KnowledgebasePage />} />
-					<Route path="embeddings" element={<KnowledgebasePage />} />
+					<Route path="embeddings" element={<KnowledgebaseEmbeddingsPage />} />
 					<Route path="files" element={<KnowledgebaseFilesPage />} />
 				</Route>
 				<Route path="ocr" element={<OCRPage />} />

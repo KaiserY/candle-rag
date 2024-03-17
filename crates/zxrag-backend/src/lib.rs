@@ -6,8 +6,11 @@ use axum::{
   Router,
 };
 use rust_embed::RustEmbed;
-use std::net::SocketAddr;
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool};
+use sqlx::ConnectOptions;
+use sqlx::{Pool, Sqlite};
 use std::sync::Arc;
+use std::{net::SocketAddr, str::FromStr};
 use tower_http::catch_panic::CatchPanicLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
@@ -18,7 +21,6 @@ use crate::controller::openai_controller;
 
 pub mod controller;
 pub mod error;
-pub mod types;
 
 #[derive(RustEmbed)]
 #[folder = "../../zxrag-ui/dist/"]
@@ -27,14 +29,28 @@ struct Dist;
 #[derive(Clone)]
 pub struct BackendState {
   config: Arc<BackendConf>,
+  pool: Pool<Sqlite>,
 }
 
 #[tokio::main]
 pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
   let addr: SocketAddr = config.bind_addr.parse()?;
 
+  SqliteConnectOptions::from_str(&config.database_url)?
+    .journal_mode(SqliteJournalMode::Wal)
+    .create_if_missing(true)
+    .connect()
+    .await?;
+
+  let pool = SqlitePool::connect(&config.database_url).await?;
+
+  let migration_sql = include_str!("../migrations/sqlite/zxrag.sql");
+
+  sqlx::query(migration_sql).execute(&pool).await?;
+
   let shared_state = BackendState {
     config: Arc::new(config),
+    pool,
   };
 
   let cors = CorsLayer::new()
