@@ -13,14 +13,15 @@ use zxrag_core::types::handle::get_text_gen;
 use zxrag_core::types::lancedb::get_embedding_schema;
 use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
 use zxrag_core::types::openai::*;
+use zxrag_core::types::sqlx::KnowledgeBase;
 
 use crate::error::BackendError;
 use crate::openai_controller::ChatCompletionResponse;
 use crate::BackendState;
 
-pub async fn create_tables(
+pub async fn create_knowledge_base(
   State(state): State<BackendState>,
-  Json(req): Json<CreateTableRequest>,
+  Json(req): Json<CreateKnowledgeBaseRequest>,
 ) -> Result<impl IntoResponse, BackendError> {
   let db = vectordb::connect(&state.config.lancedb_path)
     .await
@@ -29,7 +30,10 @@ pub async fn create_tables(
   let tables = db.table_names().await.map_err(|e| anyhow::anyhow!(e))?;
 
   if tables.contains(&req.name) {
-    Ok(Json(CreateTableResponse { name: req.name }))
+    Ok(Json(CreateKnowledgeBaseResponse {
+      name: req.name,
+      existed: true,
+    }))
   } else {
     let schema = get_embedding_schema()?;
 
@@ -42,44 +46,70 @@ pub async fn create_tables(
 
     tracing::info!("{}", tbl);
 
-    Ok(Json(CreateTableResponse { name: req.name }))
-  }
-}
-
-pub async fn list_tables(
-  State(state): State<BackendState>,
-) -> Result<impl IntoResponse, BackendError> {
-  let db = vectordb::connect(&state.config.lancedb_path)
+    sqlx::query(
+      r#"
+INSERT INTO knowledge_base ( name, created_at, updated_at )
+VALUES ( ?, ?, ? );
+        "#,
+    )
+    .bind(&req.name)
+    .bind(OffsetDateTime::now_utc().unix_timestamp())
+    .bind(OffsetDateTime::now_utc().unix_timestamp())
+    .execute(&state.pool.clone())
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 
-  let tables = db.table_names().await.map_err(|e| anyhow::anyhow!(e))?;
-
-  let data = tables
-    .into_iter()
-    .map(|t| TableDescription { name: t })
-    .collect();
-
-  Ok(Json(ListTableResponse { data }))
+    Ok(Json(CreateKnowledgeBaseResponse {
+      name: req.name,
+      existed: false,
+    }))
+  }
 }
 
-pub async fn delete_table(
+pub async fn list_knowledge_bases(
   State(state): State<BackendState>,
-  Json(req): Json<DeleteTableRequest>,
 ) -> Result<impl IntoResponse, BackendError> {
-  let db = vectordb::connect(&state.config.lancedb_path)
-    .await
-    .map_err(|e| anyhow::anyhow!(e))?;
+  let knowledge_bases = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+  SELECT * FROM knowledge_base;
+      "#,
+  )
+  .fetch_all(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
 
-  let tables = db.table_names().await.map_err(|e| anyhow::anyhow!(e))?;
+  Ok(Json(ListKnowledgeBaseResponse {
+    data: knowledge_bases,
+  }))
+}
 
-  if tables.contains(&req.name) {
-    db.drop_table(&req.name)
-      .await
-      .map_err(|e| anyhow::anyhow!(e))?;
-  }
+pub async fn delete_knowledge_base(
+  State(state): State<BackendState>,
+  Path(kb_id): Path<String>,
+) -> Result<impl IntoResponse, BackendError> {
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
 
-  Ok(Json(DeleteTableResponse { name: req.name }))
+  sqlx::query(
+    r#"
+DELETE FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(knowledge_base.id)
+  .execute(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  Ok(Json(DeleteKnowledgeBaseResponse {
+    name: knowledge_base.name,
+  }))
 }
 
 pub async fn create_chat_completion(
@@ -166,31 +196,22 @@ pub async fn create_chat_completion(
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct CreateTableRequest {
+pub struct CreateKnowledgeBaseRequest {
   name: String,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct CreateTableResponse {
+pub struct CreateKnowledgeBaseResponse {
   name: String,
+  existed: bool,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct ListTableResponse {
-  data: Vec<TableDescription>,
+pub struct ListKnowledgeBaseResponse {
+  data: Vec<KnowledgeBase>,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct TableDescription {
-  name: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct DeleteTableRequest {
-  name: String,
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct DeleteTableResponse {
+pub struct DeleteKnowledgeBaseResponse {
   name: String,
 }

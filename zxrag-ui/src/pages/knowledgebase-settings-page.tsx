@@ -1,6 +1,7 @@
 import { Link, useLocation } from "react-router-dom";
 import { InboxIcon } from "lucide-react";
 import { TrashIcon } from "@radix-ui/react-icons";
+import { useState, useEffect } from "react";
 
 import { cn } from "@/lib/utils";
 import { Separator } from "@/components/ui/separator";
@@ -8,7 +9,29 @@ import { buttonVariants } from "@/components/ui/button";
 import { FileTable } from "@/components/knowledgebase-embeddings-page/file-table";
 import { VectorTable } from "@/components/knowledgebase-embeddings-page/vector-table";
 
-export function KnowledgebaseEmbeddingsPage() {
+export function KnowledgebaseSettingsPage() {
+	const [files, setFiles] = useState<File[]>([]);
+
+	useEffect(() => {
+		const listFiles = async () => {
+			try {
+				const response = await fetch("/v1/knowledgebases");
+
+				if (!response.ok) {
+					throw new Error(`HTTP error! status: ${response.status}`);
+				}
+
+				const responseJson = await response.json();
+
+				console.log(responseJson);
+			} catch (error) {
+				console.error("Fetch error: ${error}");
+			}
+		};
+
+		listFiles();
+	}, []);
+
 	return (
 		<>
 			<div className="container h-full py-6 overflow-hidden">
@@ -57,7 +80,7 @@ export function KnowledgebaseEmbeddingsPage() {
 					<Separator orientation="vertical" />
 					<div className="flex flex-col basis-8/12 space-y-4 max-h-full overflow-auto">
 						<div>
-							<h3 className="text-lg font-medium">Profile</h3>
+							<h3 className="text-lg font-medium">Embedding</h3>
 							<p className="text-sm text-muted-foreground">
 								This is how others will see you on the site.
 							</p>

@@ -1,4 +1,4 @@
-CREATE TABLE file (
+CREATE TABLE IF NOT EXISTS file (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   filename TEXT NOT NULL,
   bytes INTEGER NOT NULL,
@@ -7,29 +7,29 @@ CREATE TABLE file (
   updated_at INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX idx_unique_filename_purpose ON file (filename, purpose);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_filename_purpose ON file (filename, purpose);
 
-CREATE TABLE embedding (
+CREATE TABLE IF NOT EXISTS knowledge_base (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   name TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX idx_unique_name ON embedding (name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_name ON knowledge_base (name);
 
-CREATE TABLE embedding_file (
+CREATE TABLE IF NOT EXISTS knowledge_base_file (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  embedding_id INTEGER NOT NULL,
-  file_id INTEGER NOT NULL,
+  kb_id INTEGER NOT NULL,
+  file_id INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX idx_unique_embedding_id_file_id ON embedding_file (embedding_id, file_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_kb_id_file_id ON knowledge_base_file (kb_id, file_id);
 
-CREATE TABLE embedding_vector (
+CREATE TABLE IF NOT EXISTS knowledge_base_vector (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  embedding_id INTEGER NOT NULL,
-  vector_id INTEGER NOT NULL,
+  kb_id INTEGER NOT NULL,
+  vector_id INTEGER NOT NULL
 );
 
-CREATE UNIQUE INDEX idx_unique_embedding_id_vector_id ON embedding_file (embedding_id, vector_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_kb_id_vector_id ON knowledge_base_vector (kb_id, vector_id);

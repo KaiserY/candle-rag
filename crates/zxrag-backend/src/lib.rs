@@ -60,15 +60,16 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
 
   let knowledge_base_routes = Router::new()
     .route(
-      "/tables",
-      get(knowledge_base_controller::list_tables).post(knowledge_base_controller::create_tables),
+      "/",
+      get(knowledge_base_controller::list_knowledge_bases)
+        .post(knowledge_base_controller::create_knowledge_base),
     )
     .route(
-      "/:table_id",
-      delete(knowledge_base_controller::delete_table),
+      "/:kb_id",
+      delete(knowledge_base_controller::delete_knowledge_base),
     )
     .route(
-      "/:table_id/chat/completions",
+      "/:kb_id/chat/completions",
       post(knowledge_base_controller::create_chat_completion),
     );
 
@@ -84,7 +85,7 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
       post(openai_controller::upload_file).get(openai_controller::list_files),
     )
     .route("/files/:file_id", delete(openai_controller::delete_file))
-    .nest("/knowledgebase", knowledge_base_routes);
+    .nest("/knowledgebases", knowledge_base_routes);
 
   let app = Router::new()
     .nest("/v1", v1_routes)
