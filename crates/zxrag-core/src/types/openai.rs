@@ -304,16 +304,23 @@ pub struct Model<'a> {
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct ListFilesResponse<'a> {
-  pub object: String,
+  pub object: Cow<'a, str>,
   pub data: Vec<File<'a>>,
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
 pub struct File<'a> {
   pub id: Cow<'a, str>,
-  pub bytes: u64,
+  pub bytes: i64,
   pub created_at: i64,
   pub filename: Cow<'a, str>,
   pub object: Cow<'a, str>,
   pub purpose: Cow<'a, str>,
+}
+
+#[derive(Deserialize, Serialize, Debug, PartialEq, Eq)]
+pub struct DeleteFileResponse<'a> {
+  pub id: Cow<'a, str>,
+  pub object: Cow<'a, str>,
+  pub deleted: bool,
 }

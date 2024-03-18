@@ -1,9 +1,8 @@
 use axum::extract::{Multipart, Path, State};
 use axum::response::{sse::Event, IntoResponse, Json, Response, Sse};
-use chrono::NaiveDateTime;
 use futures::{Stream, TryStream};
 use opendal::services::Fs;
-use opendal::{Metakey, Operator};
+use opendal::Operator;
 use std::borrow::Cow;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use time::OffsetDateTime;
@@ -204,14 +203,14 @@ pub async fn upload_file(
       sqlx::query(
         r#"
 REPLACE INTO file ( filename, bytes, purpose, created_at, updated_at )
-VALUES ( ?, ?, ?, ?, ? )
+VALUES ( ?, ?, ?, ?, ? );
         "#,
       )
       .bind(file_name)
       .bind(bytes)
       .bind("fine-tune")
-      .bind(NaiveDateTime::default().and_utc().timestamp())
-      .bind(NaiveDateTime::default().and_utc().timestamp())
+      .bind(OffsetDateTime::now_utc().unix_timestamp())
+      .bind(OffsetDateTime::now_utc().unix_timestamp())
       .execute(&state.pool.clone())
       .await
       .map_err(|e| anyhow::anyhow!(e))?;
@@ -237,33 +236,17 @@ SELECT * FROM file;
   .await
   .map_err(|e| anyhow::anyhow!(e))?;
 
-  tracing::info!("{:?}", sqlx_files);
-
-  let op: Operator = Operator::new(builder)
-    .map_err(|e| anyhow::anyhow!(e))?
-    .finish();
-
-  let files = op
-    .list_with("/")
-    .metakey(Metakey::ContentLength | Metakey::LastModified)
-    .await
-    .map_err(|e| anyhow::anyhow!(e))?;
-
   Ok(Json(ListFilesResponse {
-    object: "list".to_string(),
-    data: files
+    object: Cow::Owned("list".to_string()),
+    data: sqlx_files
       .into_iter()
       .map(|f| File {
-        id: Cow::Owned(Uuid::new_v4().to_string()),
-        bytes: f.metadata().content_length(),
-        created_at: f
-          .metadata()
-          .last_modified()
-          .map(|d| d.timestamp())
-          .unwrap_or_default(),
-        filename: Cow::Owned(f.name().to_string()),
+        id: Cow::Owned(f.id.to_string()),
+        bytes: f.bytes,
+        created_at: f.created_at,
+        filename: Cow::Owned(f.filename),
         object: Cow::Owned("file".to_string()),
-        purpose: Cow::Owned("embeddings".to_string()),
+        purpose: Cow::Owned(f.purpose),
       })
       .collect(),
   }))
@@ -273,6 +256,16 @@ pub async fn delete_file(
   State(state): State<BackendState>,
   Path(file_id): Path<String>,
 ) -> Result<impl IntoResponse, BackendError> {
+  let sqlx_file = sqlx::query_as::<_, SqlxFile>(
+    r#"
+SELECT * FROM file where id = ?;
+    "#,
+  )
+  .bind(file_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
   let mut builder = Fs::default();
 
   builder.root(&state.config.opendal_path);
@@ -281,9 +274,25 @@ pub async fn delete_file(
     .map_err(|e| anyhow::anyhow!(e))?
     .finish();
 
-  op.delete(&file_id).await.map_err(|e| anyhow::anyhow!(e))?;
+  op.delete(&sqlx_file.filename)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
 
-  Ok(())
+  sqlx::query(
+    r#"
+DELETE FROM file where id = ?;
+    "#,
+  )
+  .bind(sqlx_file.id)
+  .execute(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  Ok(Json(DeleteFileResponse {
+    id: Cow::Owned(sqlx_file.id.to_string()),
+    object: Cow::Owned("file".to_string()),
+    deleted: true,
+  }))
 }
 
 pub enum ChatCompletionResponse<'a, S>

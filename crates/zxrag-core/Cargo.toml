@@ -26,7 +26,6 @@ sqlx = { workspace = true }
 either = { workspace = true }
 derive_more = { workspace = true }
 tinyvec = { workspace = true }
-chrono = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }

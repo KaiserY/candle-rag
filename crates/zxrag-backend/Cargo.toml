@@ -30,7 +30,5 @@ tinyvec = { workspace = true }
 vectordb = { workspace = true }
 arrow-schema = { workspace = true }
 arrow-array = { workspace = true }
-redb = { workspace = true }
 opendal = { workspace = true }
 sqlx = { workspace = true }
-chrono = { workspace = true }
