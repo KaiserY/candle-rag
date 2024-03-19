@@ -12,12 +12,10 @@ export const fileSchema = z.object({
 export type File = z.infer<typeof fileSchema>;
 
 export const knowledgeBaseSchema = z.object({
-	id: z.string(),
-	bytes: z.number(),
+	id: z.number(),
+	name: z.string(),
 	created_at: z.number(),
-	filename: z.string(),
-	object: z.string(),
-	purpose: z.string(),
+	updated_at: z.number(),
 });
 
 export type KnowledgeBase = z.infer<typeof knowledgeBaseSchema>;
