@@ -62,10 +62,10 @@ export function MainNav({
 											<BreadcrumbItem>Chat</BreadcrumbItem>
 										</>
 									)}
-									{location.pathname === "/knowledgebase/embeddings" && (
+									{location.pathname === "/knowledgebase/settings" && (
 										<>
 											<BreadcrumbSeparator />
-											<BreadcrumbItem>Embeddings</BreadcrumbItem>
+											<BreadcrumbItem>Settings</BreadcrumbItem>
 										</>
 									)}
 									{location.pathname === "/knowledgebase/files" && (
@@ -100,17 +100,17 @@ export function MainNav({
 								<li>
 									<NavigationMenuLink asChild>
 										<Link
-											to="/knowledgebase/embeddings"
+											to="/knowledgebase/settings"
 											className={cn(
 												"block select-none space-y-1 rounded-md p-3 leading-none no-underline outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground",
 												className,
 											)}
 										>
 											<div className="text-sm font-medium leading-none">
-												Embeddings
+                      Settings
 											</div>
 											<p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
-												Knowledge Base Embeddings
+												Knowledge Base Settings
 											</p>
 										</Link>
 									</NavigationMenuLink>

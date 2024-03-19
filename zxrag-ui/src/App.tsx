@@ -25,7 +25,7 @@ export default function App() {
 				<Route path="chat" element={<ChatPage />} />
 				<Route path="knowledgebase">
 					<Route path="chat" element={<KnowledgebasePage />} />
-					<Route path="embeddings" element={<KnowledgebaseSettingsPage />} />
+					<Route path="settings" element={<KnowledgebaseSettingsPage />} />
 					<Route path="files" element={<KnowledgebaseFilesPage />} />
 				</Route>
 				<Route path="ocr" element={<OCRPage />} />

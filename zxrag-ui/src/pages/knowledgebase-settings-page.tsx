@@ -1,4 +1,4 @@
-import { Link, useLocation } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { InboxIcon } from "lucide-react";
 import { PlusCircledIcon, TrashIcon } from "@radix-ui/react-icons";
 import { useState, useEffect } from "react";
@@ -26,42 +26,84 @@ export function KnowledgebaseSettingsPage() {
 	const [createKbName, setCreateKbName] = useState("");
 	const [createKbOpen, setCreateKbOpen] = useState(false);
 	const [deleteKbOpen, setDeleteKbOpen] = useState(false);
+	const [selectedknowledgeBase, setSelectedknowledgeBase] =
+		useState<KnowledgeBase>({ id: 0, name: "", created_at: 0, updated_at: 0 });
 
 	useEffect(() => {
-		const listFiles = async () => {
-			try {
-				const response = await fetch("/v1/knowledgebases");
-
-				if (!response.ok) {
-					throw new Error(`HTTP error! status: ${response.status}`);
-				}
-
-				const responseJson = await response.json();
-
-				console.log(responseJson);
-			} catch (error) {
-				console.error("Fetch error: ${error}");
-			}
-		};
-
-		setKnowledgeBases([
-			{
-				id: 1,
-				name: "aa",
-				created_at: 1,
-				updated_at: 1,
-			},
-		]);
-
 		listFiles();
 	}, []);
 
-	const create_knowledge_base = async (kb_name: number) => {
-		console.log(kb_name);
+	const listFiles = async () => {
+		try {
+			const response = await fetch("/v1/knowledgebases");
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const responseJson = await response.json();
+
+			const knowledgeBases: KnowledgeBase[] = responseJson.data;
+
+			setKnowledgeBases(knowledgeBases);
+
+			if (selectedknowledgeBase.id === 0 && knowledgeBases.length > 0) {
+				setSelectedknowledgeBase(knowledgeBases[0]);
+			}
+		} catch (error) {
+			console.error(`Fetch error: ${error}`);
+		}
+	};
+
+	const create_knowledge_base = async (kb_name: string) => {
+		try {
+			const response = await fetch("/v1/knowledgebases", {
+				method: "POST",
+				headers: {
+					"Content-Type": "application/json",
+				},
+				body: JSON.stringify({ name: kb_name }),
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const responseJson = await response.json();
+
+			console.log(responseJson);
+
+			listFiles();
+
+			setSelectedknowledgeBase({
+				id: responseJson.id,
+				name: responseJson.name,
+				created_at: 0,
+				updated_at: 0,
+			});
+		} catch (error) {
+			console.error(`Fetch error: ${error}`);
+		}
 	};
 
 	const delete_knowledge_base = async (kb_id: number) => {
-		console.log(kb_id);
+		try {
+			const response = await fetch(`/v1/knowledgebases/${kb_id}`, {
+				method: "DELETE",
+			});
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const responseJson = await response.json();
+
+			console.log(responseJson);
+
+			listFiles();
+		} catch (error) {
+			console.error(`Fetch error: ${error}`);
+		}
 	};
 
 	return (
@@ -76,15 +118,20 @@ export function KnowledgebaseSettingsPage() {
 										key=""
 										to="#"
 										className={cn(
-											buttonVariants({ variant: "secondary", size: "default" }),
-											true &&
-												"dark:bg-muted dark:text-white dark:hover:bg-muted dark:hover:text-white",
-											"justify-start",
+											buttonVariants({
+												variant:
+													selectedknowledgeBase.id === kb.id
+														? "secondary"
+														: "ghost",
+												size: "default",
+											}),
 										)}
+										onClick={() => {
+											setSelectedknowledgeBase(kb);
+										}}
 									>
 										<InboxIcon className="mr-2 h-4 w-4" />
 										{kb.name}
-
 										<Dialog open={deleteKbOpen} onOpenChange={setDeleteKbOpen}>
 											<DialogTrigger asChild>
 												<Label className="ml-auto">
@@ -93,7 +140,7 @@ export function KnowledgebaseSettingsPage() {
 											</DialogTrigger>
 											<DialogContent className="sm:max-w-[425px]">
 												<DialogHeader>
-													<DialogTitle>Delete KB</DialogTitle>
+													<DialogTitle>Delete KB "{kb.name}"</DialogTitle>
 													<DialogDescription>Are you sure?</DialogDescription>
 												</DialogHeader>
 												<DialogFooter>
@@ -101,9 +148,9 @@ export function KnowledgebaseSettingsPage() {
 														variant="destructive"
 														type="button"
 														onClick={(e) => {
-															setDeleteKbOpen(false);
 															e.preventDefault();
-															console.log(e.target);
+															delete_knowledge_base(kb.id);
+															setDeleteKbOpen(false);
 														}}
 													>
 														Delete
@@ -145,9 +192,9 @@ export function KnowledgebaseSettingsPage() {
 											variant="default"
 											type="button"
 											onClick={(e) => {
-												setCreateKbOpen(false);
 												e.preventDefault();
-												console.log(e.target);
+												create_knowledge_base(createKbName);
+												setCreateKbOpen(false);
 											}}
 										>
 											Create KB
@@ -160,7 +207,9 @@ export function KnowledgebaseSettingsPage() {
 					<Separator orientation="vertical" />
 					<div className="flex flex-col basis-8/12 space-y-4 px-2 max-h-full overflow-auto">
 						<div>
-							<h3 className="text-lg font-medium">Embedding</h3>
+							<h3 className="text-lg font-medium">
+								Knowledge Base {selectedknowledgeBase.name}
+							</h3>
 							<p className="text-sm text-muted-foreground">
 								This is how others will see you on the site.
 							</p>

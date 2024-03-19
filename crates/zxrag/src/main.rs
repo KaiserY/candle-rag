@@ -14,6 +14,7 @@ use zxrag_core::types::conf::{init_backend_conf, BackendConf};
 use zxrag_core::types::handle::{
   get_embedding_model, get_text_gen, set_embedding_model_handle, set_llm_model_handle,
 };
+use zxrag_core::types::lancedb::set_embedding_schema;
 use zxrag_core::types::llm::TextGenerationSetting;
 
 #[derive(Debug, Default, Args)]
@@ -75,6 +76,8 @@ fn main() -> Result<(), anyhow::Error> {
       set_llm_model_handle(config.llm_conf.model_id, &config.llm_conf)?;
 
       set_embedding_model_handle(config.embedding_conf.model_id, &config.embedding_conf)?;
+
+      set_embedding_schema()?;
 
       run_backend(config)?;
     }

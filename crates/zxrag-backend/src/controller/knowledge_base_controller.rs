@@ -23,47 +23,55 @@ pub async fn create_knowledge_base(
   State(state): State<BackendState>,
   Json(req): Json<CreateKnowledgeBaseRequest>,
 ) -> Result<impl IntoResponse, BackendError> {
+  sqlx::query(
+    r#"
+INSERT INTO knowledge_base ( name, created_at, updated_at )
+VALUES ( ?, ?, ? );
+        "#,
+  )
+  .bind(&req.name)
+  .bind(OffsetDateTime::now_utc().unix_timestamp())
+  .bind(OffsetDateTime::now_utc().unix_timestamp())
+  .execute(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where name = ?;
+    "#,
+  )
+  .bind(&req.name)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
   let db = vectordb::connect(&state.config.lancedb_path)
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 
   let tables = db.table_names().await.map_err(|e| anyhow::anyhow!(e))?;
 
-  if tables.contains(&req.name) {
-    Ok(Json(CreateKnowledgeBaseResponse {
-      name: req.name,
-      existed: true,
-    }))
-  } else {
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  if !tables.contains(&kb_table_name) {
     let schema = get_embedding_schema()?;
 
     let batches = RecordBatchIterator::new(vec![], schema);
 
     let tbl = db
-      .create_table(&req.name, Box::new(batches), None)
+      .create_table(&kb_table_name, Box::new(batches), None)
       .await
       .map_err(|e| anyhow::anyhow!(e))?;
 
-    tracing::info!("{}", tbl);
-
-    sqlx::query(
-      r#"
-INSERT INTO knowledge_base ( name, created_at, updated_at )
-VALUES ( ?, ?, ? );
-        "#,
-    )
-    .bind(&req.name)
-    .bind(OffsetDateTime::now_utc().unix_timestamp())
-    .bind(OffsetDateTime::now_utc().unix_timestamp())
-    .execute(&state.pool.clone())
-    .await
-    .map_err(|e| anyhow::anyhow!(e))?;
-
-    Ok(Json(CreateKnowledgeBaseResponse {
-      name: req.name,
-      existed: false,
-    }))
+    tracing::info!("create_table = {}", tbl);
   }
+
+  Ok(Json(CreateKnowledgeBaseResponse {
+    id: knowledge_base.id,
+    name: req.name,
+    existed: false,
+  }))
 }
 
 pub async fn list_knowledge_bases(
@@ -96,6 +104,22 @@ SELECT * FROM knowledge_base where id = ?;
   .fetch_one(&state.pool.clone())
   .await
   .map_err(|e| anyhow::anyhow!(e))?;
+
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  let db = vectordb::connect(&state.config.lancedb_path)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let tables = db.table_names().await.map_err(|e| anyhow::anyhow!(e))?;
+
+  if tables.contains(&kb_table_name) {
+    db.drop_table(&kb_table_name)
+      .await
+      .map_err(|e| anyhow::anyhow!(e))?;
+
+    tracing::info!("drop_table = {}", kb_table_name);
+  }
 
   sqlx::query(
     r#"
@@ -202,6 +226,7 @@ pub struct CreateKnowledgeBaseRequest {
 
 #[derive(Serialize, Deserialize)]
 pub struct CreateKnowledgeBaseResponse {
+  id: i64,
   name: String,
   existed: bool,
 }
