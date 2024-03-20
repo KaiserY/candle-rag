@@ -70,11 +70,11 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     )
     .route(
       "/:kb_id/files",
-      post(openai_controller::upload_file).get(openai_controller::list_files),
+      post(knowledge_base_controller::upload_file).get(knowledge_base_controller::list_files),
     )
     .route(
       "/:kb_id/files/:file_id",
-      delete(openai_controller::delete_file),
+      delete(knowledge_base_controller::delete_file),
     )
     .route(
       "/:kb_id/chat/completions",

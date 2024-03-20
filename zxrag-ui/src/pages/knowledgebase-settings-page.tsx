@@ -30,10 +30,10 @@ export function KnowledgebaseSettingsPage() {
 		useState<KnowledgeBase>({ id: 0, name: "", created_at: 0, updated_at: 0 });
 
 	useEffect(() => {
-		listFiles();
+		listKnowledgeBases();
 	}, []);
 
-	const listFiles = async () => {
+	const listKnowledgeBases = async () => {
 		try {
 			const response = await fetch("/v1/knowledgebases");
 
@@ -73,7 +73,7 @@ export function KnowledgebaseSettingsPage() {
 
 			console.log(responseJson);
 
-			listFiles();
+			listKnowledgeBases();
 
 			setSelectedknowledgeBase({
 				id: responseJson.id,
@@ -100,7 +100,7 @@ export function KnowledgebaseSettingsPage() {
 
 			console.log(responseJson);
 
-			listFiles();
+			listKnowledgeBases();
 		} catch (error) {
 			console.error(`Fetch error: ${error}`);
 		}
@@ -115,7 +115,7 @@ export function KnowledgebaseSettingsPage() {
 							{knowledgeBases.map((kb) => {
 								return (
 									<Link
-										key=""
+										key={kb.id}
 										to="#"
 										className={cn(
 											buttonVariants({
@@ -217,7 +217,7 @@ export function KnowledgebaseSettingsPage() {
 						<Separator orientation="horizontal" />
 						<div>
 							<h3 className="text-lg font-medium">File</h3>
-							<FileTable />
+							<FileTable selectedknowledgeBase={selectedknowledgeBase} />
 						</div>
 						<Separator orientation="horizontal" />
 						<div>

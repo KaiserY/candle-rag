@@ -1,8 +1,9 @@
-import * as React from "react";
+import { useEffect, useState, useRef } from "react";
 import {
 	CaretSortIcon,
 	ChevronDownIcon,
 	DotsHorizontalIcon,
+	UploadIcon,
 } from "@radix-ui/react-icons";
 import {
 	ColumnDef,
@@ -17,6 +18,7 @@ import {
 	useReactTable,
 } from "@tanstack/react-table";
 
+import { KnowledgeBase, File } from "@/schema";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -38,47 +40,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 
-const data: Payment[] = [
-	{
-		id: "m5gr84i9",
-		amount: 316,
-		status: "success",
-		email: "ken99@yahoo.com",
-	},
-	{
-		id: "3u1reuv4",
-		amount: 242,
-		status: "success",
-		email: "Abe45@gmail.com",
-	},
-	{
-		id: "derv1ws0",
-		amount: 837,
-		status: "processing",
-		email: "Monserrat44@gmail.com",
-	},
-	{
-		id: "5kma53ae",
-		amount: 874,
-		status: "success",
-		email: "Silas22@gmail.com",
-	},
-	{
-		id: "bhqecj4p",
-		amount: 721,
-		status: "failed",
-		email: "carmella@hotmail.com",
-	},
-];
-
-export type Payment = {
-	id: string;
-	amount: number;
-	status: "pending" | "processing" | "success" | "failed";
-	email: string;
-};
-
-export const columns: ColumnDef<Payment>[] = [
+export const columns: ColumnDef<File>[] = [
 	{
 		id: "select",
 		header: ({ table }) => (
@@ -102,47 +64,39 @@ export const columns: ColumnDef<Payment>[] = [
 		enableHiding: false,
 	},
 	{
-		accessorKey: "status",
-		header: "Status",
+		accessorKey: "filename",
+		header: "Filename",
 		cell: ({ row }) => (
-			<div className="capitalize">{row.getValue("status")}</div>
+			<div className="capitalize">{row.getValue("filename")}</div>
 		),
 	},
 	{
-		accessorKey: "email",
+		accessorKey: "bytes",
 		header: ({ column }) => {
 			return (
 				<Button
 					variant="ghost"
 					onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
 				>
-					Email
+					Size
 					<CaretSortIcon className="ml-2 h-4 w-4" />
 				</Button>
 			);
 		},
-		cell: ({ row }) => <div className="lowercase">{row.getValue("email")}</div>,
+		cell: ({ row }) => <div className="lowercase">{row.getValue("bytes")}</div>,
 	},
 	{
-		accessorKey: "amount",
-		header: () => <div className="text-right">Amount</div>,
+		accessorKey: "created_at",
+		header: () => <div className="text-right">Created</div>,
 		cell: ({ row }) => {
-			const amount = parseFloat(row.getValue("amount"));
-
-			// Format the amount as a dollar amount
-			const formatted = new Intl.NumberFormat("en-US", {
-				style: "currency",
-				currency: "USD",
-			}).format(amount);
-
-			return <div className="text-right font-medium">{formatted}</div>;
+			<div className="capitalize">{row.getValue("created_at")}</div>;
 		},
 	},
 	{
 		id: "actions",
 		enableHiding: false,
 		cell: ({ row }) => {
-			const payment = row.original;
+			const file = row.original;
 
 			return (
 				<DropdownMenu>
@@ -155,7 +109,7 @@ export const columns: ColumnDef<Payment>[] = [
 					<DropdownMenuContent align="end">
 						<DropdownMenuLabel>Actions</DropdownMenuLabel>
 						<DropdownMenuItem
-							onClick={() => navigator.clipboard.writeText(payment.id)}
+							onClick={() => navigator.clipboard.writeText(file.id)}
 						>
 							Copy payment ID
 						</DropdownMenuItem>
@@ -169,17 +123,23 @@ export const columns: ColumnDef<Payment>[] = [
 	},
 ];
 
-export function FileTable() {
-	const [sorting, setSorting] = React.useState<SortingState>([]);
-	const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>(
-		[],
-	);
-	const [columnVisibility, setColumnVisibility] =
-		React.useState<VisibilityState>({});
-	const [rowSelection, setRowSelection] = React.useState({});
+interface FileTableProps {
+	selectedknowledgeBase: KnowledgeBase;
+}
+
+export function FileTable({ selectedknowledgeBase }: FileTableProps) {
+	const [sorting, setSorting] = useState<SortingState>([]);
+	const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
+	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
+	const [rowSelection, setRowSelection] = useState({});
+	const [files, setFiles] = useState<File[]>([]);
+
+	console.log(selectedknowledgeBase);
+
+	const inputRef = useRef<HTMLInputElement>(null);
 
 	const table = useReactTable({
-		data,
+		data: files,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -197,14 +157,86 @@ export function FileTable() {
 		},
 	});
 
+	useEffect(() => {
+		if (selectedknowledgeBase.id !== 0) {
+			listKnowledgeBaseFiles();
+		}
+	}, [selectedknowledgeBase]);
+
+	const listKnowledgeBaseFiles = async () => {
+		try {
+			const response = await fetch(
+				`/v1/knowledgebases/${selectedknowledgeBase.id}/files`,
+			);
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const responseJson = await response.json();
+
+			setFiles(responseJson.data);
+		} catch (error) {
+			console.error(`Fetch error: ${error}`);
+		}
+	};
+
+	const handleChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+		console.log(e.target.files);
+
+		if (e.target.files != null && e.target.files.length > 0) {
+			const formData = new FormData();
+
+			formData.append("file", e.target.files[0], e.target.files[0].name);
+
+			try {
+				const response = await fetch(
+					`/v1/knowledgebases/${selectedknowledgeBase.id}/files`,
+					{
+						method: "POST",
+						body: formData,
+					},
+				);
+
+				if (!response.ok) {
+					throw new Error(`HTTP error! status: ${response.status}`);
+				}
+
+				listKnowledgeBaseFiles();
+			} catch (error) {
+				console.error(`Fetch error: ${error}`);
+			}
+		}
+	};
+
 	return (
 		<div className="w-full">
 			<div className="flex items-center py-4">
+				<Button
+					variant="secondary"
+					className="h-8 px-2 lg:px-3"
+					onClick={(e) => {
+						e.preventDefault();
+						inputRef.current?.click();
+					}}
+				>
+					<UploadIcon className="mr-2 h-4 w-4" />
+					Upload
+				</Button>
 				<Input
-					placeholder="Filter emails..."
-					value={(table.getColumn("email")?.getFilterValue() as string) ?? ""}
+					id="file"
+					type="file"
+					className="hidden"
+					ref={inputRef}
+					onChange={handleChange}
+				/>
+				<Input
+					placeholder="Filter Filenames..."
+					value={
+						(table.getColumn("filename")?.getFilterValue() as string) ?? ""
+					}
 					onChange={(event) =>
-						table.getColumn("email")?.setFilterValue(event.target.value)
+						table.getColumn("filename")?.setFilterValue(event.target.value)
 					}
 					className="max-w-sm"
 				/>

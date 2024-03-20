@@ -200,7 +200,7 @@ VALUES ( ?, ?, ?, ?, ? );
       )
       .bind(&file_name)
       .bind(bytes)
-      .bind("embeding")
+      .bind("embedding")
       .bind(OffsetDateTime::now_utc().unix_timestamp())
       .bind(OffsetDateTime::now_utc().unix_timestamp())
       .execute(&state.pool.clone())
@@ -305,7 +305,7 @@ SELECT * FROM file where id = ?;
 
   let mut builder = Fs::default();
 
-  builder.root(&state.config.opendal_path);
+  builder.root(&format!("{}/{}", &state.config.opendal_path, kb_table_name));
 
   let op: Operator = Operator::new(builder)
     .map_err(|e| anyhow::anyhow!(e))?
