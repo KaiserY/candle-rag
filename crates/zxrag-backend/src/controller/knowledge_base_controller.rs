@@ -1,7 +1,8 @@
 use arrow_array::RecordBatchIterator;
-use axum::extract::{Path, State};
+use axum::extract::{Multipart, Path, State};
 use axum::response::{sse::Event, IntoResponse, Json, Sse};
-
+use opendal::services::Fs;
+use opendal::Operator;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::time::Duration;
@@ -13,6 +14,7 @@ use zxrag_core::types::handle::get_text_gen;
 use zxrag_core::types::lancedb::get_embedding_schema;
 use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
 use zxrag_core::types::openai::*;
+use zxrag_core::types::sqlx::File as SqlxFile;
 use zxrag_core::types::sqlx::KnowledgeBase;
 
 use crate::error::BackendError;
@@ -133,6 +135,211 @@ DELETE FROM knowledge_base where id = ?;
 
   Ok(Json(DeleteKnowledgeBaseResponse {
     name: knowledge_base.name,
+  }))
+}
+
+pub async fn upload_file(
+  State(state): State<BackendState>,
+  Path(kb_id): Path<String>,
+  mut multipart: Multipart,
+) -> Result<impl IntoResponse, BackendError> {
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  while let Some(mut field) = multipart
+    .next_field()
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?
+  {
+    let name = field.name().unwrap_or_default();
+
+    if name == "file" {
+      let file_name = field
+        .file_name()
+        .ok_or(anyhow::anyhow!("file_name not found"))?
+        .to_string();
+
+      let mut builder = Fs::default();
+
+      builder.root(&format!("{}/{}", &state.config.opendal_path, kb_table_name));
+
+      let op: Operator = Operator::new(builder)
+        .map_err(|e| anyhow::anyhow!(e))?
+        .finish();
+
+      let mut w = op
+        .writer_with(&file_name)
+        .append(true)
+        .await
+        .map_err(|e| anyhow::anyhow!(e))?;
+
+      let mut bytes: i64 = 0;
+
+      while let Some(chunk) = field.chunk().await.map_err(|e| anyhow::anyhow!(e))? {
+        bytes += chunk.len() as i64;
+
+        w.write(chunk).await.map_err(|e| anyhow::anyhow!(e))?;
+      }
+
+      w.close().await.map_err(|e| anyhow::anyhow!(e))?;
+
+      sqlx::query(
+        r#"
+REPLACE INTO file ( filename, bytes, purpose, created_at, updated_at )
+VALUES ( ?, ?, ?, ?, ? );
+        "#,
+      )
+      .bind(&file_name)
+      .bind(bytes)
+      .bind("embeding")
+      .bind(OffsetDateTime::now_utc().unix_timestamp())
+      .bind(OffsetDateTime::now_utc().unix_timestamp())
+      .execute(&state.pool.clone())
+      .await
+      .map_err(|e| anyhow::anyhow!(e))?;
+
+      let file = sqlx::query_as::<_, SqlxFile>(
+        r#"
+SELECT * FROM file where filename = ?;
+      "#,
+      )
+      .bind(&file_name)
+      .fetch_one(&state.pool.clone())
+      .await
+      .map_err(|e| anyhow::anyhow!(e))?;
+
+      sqlx::query(
+        r#"
+REPLACE INTO knowledge_base_file ( kb_id, file_id )
+VALUES ( ?, ? );
+        "#,
+      )
+      .bind(knowledge_base.id)
+      .bind(file.id)
+      .execute(&state.pool.clone())
+      .await
+      .map_err(|e| anyhow::anyhow!(e))?;
+    }
+  }
+
+  Ok(())
+}
+
+pub async fn list_files(
+  State(state): State<BackendState>,
+  Path(kb_id): Path<String>,
+) -> Result<impl IntoResponse, BackendError> {
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let sqlx_files = sqlx::query_as::<_, SqlxFile>(
+    r#"
+SELECT f.*
+FROM file f
+JOIN knowledge_base_file kbf ON f.id = kbf.file_id
+WHERE kbf.kb_id = ?;
+    "#,
+  )
+  .bind(knowledge_base.id)
+  .fetch_all(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  Ok(Json(ListFilesResponse {
+    object: Cow::Owned("list".to_string()),
+    data: sqlx_files
+      .into_iter()
+      .map(|f| File {
+        id: Cow::Owned(f.id.to_string()),
+        bytes: f.bytes,
+        created_at: f.created_at,
+        filename: Cow::Owned(f.filename),
+        object: Cow::Owned("file".to_string()),
+        purpose: Cow::Owned(f.purpose),
+      })
+      .collect(),
+  }))
+}
+
+pub async fn delete_file(
+  State(state): State<BackendState>,
+  Path((kb_id, file_id)): Path<(String, String)>,
+) -> Result<impl IntoResponse, BackendError> {
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  let sqlx_file = sqlx::query_as::<_, SqlxFile>(
+    r#"
+SELECT * FROM file where id = ?;
+    "#,
+  )
+  .bind(file_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let mut builder = Fs::default();
+
+  builder.root(&state.config.opendal_path);
+
+  let op: Operator = Operator::new(builder)
+    .map_err(|e| anyhow::anyhow!(e))?
+    .finish();
+
+  op.delete(&sqlx_file.filename)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+    sqlx::query(
+      r#"
+DELETE FROM knowledge_base_file where kb_id = ? AND file_id = ?;
+      "#,
+    )
+    .bind(knowledge_base.id)
+    .bind(sqlx_file.id)
+    .execute(&state.pool.clone())
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  sqlx::query(
+    r#"
+DELETE FROM file where id = ?;
+    "#,
+  )
+  .bind(sqlx_file.id)
+  .execute(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  Ok(Json(DeleteFileResponse {
+    id: Cow::Owned(sqlx_file.id.to_string()),
+    object: Cow::Owned("file".to_string()),
+    deleted: true,
   }))
 }
 
