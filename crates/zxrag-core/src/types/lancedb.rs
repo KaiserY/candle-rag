@@ -7,7 +7,9 @@ pub static EMBEDDING_SCHEMA: OnceLock<Arc<Schema>> = OnceLock::new();
 pub fn set_embedding_schema() -> anyhow::Result<()> {
   EMBEDDING_SCHEMA
     .set(Arc::new(Schema::new(vec![
-      Field::new("id", DataType::Int32, false),
+      Field::new("id", DataType::Int64, false),
+      Field::new("kb_id", DataType::Int64, false),
+      Field::new("file_id", DataType::Int64, false),
       Field::new("file_name", DataType::Utf8, false),
       Field::new("text", DataType::Utf8, false),
       Field::new(

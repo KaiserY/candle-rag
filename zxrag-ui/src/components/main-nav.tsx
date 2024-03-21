@@ -107,7 +107,7 @@ export function MainNav({
 											)}
 										>
 											<div className="text-sm font-medium leading-none">
-                      Settings
+												Settings
 											</div>
 											<p className="line-clamp-2 text-sm leading-snug text-muted-foreground">
 												Knowledge Base Settings

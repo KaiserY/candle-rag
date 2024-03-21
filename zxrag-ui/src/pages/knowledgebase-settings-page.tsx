@@ -222,7 +222,7 @@ export function KnowledgebaseSettingsPage() {
 						<Separator orientation="horizontal" />
 						<div>
 							<h3 className="text-lg font-medium">Vector</h3>
-							<VectorTable />
+							<VectorTable selectedknowledgeBase={selectedknowledgeBase} />
 						</div>
 					</div>
 				</div>

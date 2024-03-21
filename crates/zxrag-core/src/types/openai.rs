@@ -265,6 +265,7 @@ pub struct CreateEmbeddingRequest<'a> {
   pub model: Cow<'a, str>,
   pub encoding_format: Option<Cow<'a, str>>,
   pub dimensions: Option<usize>,
+  pub file_id: Option<i64>,
 }
 
 #[derive(Serialize, Deserialize)]

@@ -22,7 +22,7 @@ export function DataTableRowActions<TData>({
 	console.log(row);
 
 	const handleDelete = async () => {
-		await openai.files.del(row.getValue("filename"));
+		await openai.files.del(row.getValue("id"));
 	};
 
 	return (

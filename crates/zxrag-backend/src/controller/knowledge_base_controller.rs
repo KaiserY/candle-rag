@@ -194,37 +194,16 @@ SELECT * FROM knowledge_base where id = ?;
 
       sqlx::query(
         r#"
-REPLACE INTO file ( filename, bytes, purpose, created_at, updated_at )
-VALUES ( ?, ?, ?, ?, ? );
+REPLACE INTO file ( kb_id, filename, bytes, purpose, created_at, updated_at )
+VALUES ( ?, ?, ?, ?, ?, ? );
         "#,
       )
+      .bind(&knowledge_base.id)
       .bind(&file_name)
       .bind(bytes)
       .bind("embedding")
       .bind(OffsetDateTime::now_utc().unix_timestamp())
       .bind(OffsetDateTime::now_utc().unix_timestamp())
-      .execute(&state.pool.clone())
-      .await
-      .map_err(|e| anyhow::anyhow!(e))?;
-
-      let file = sqlx::query_as::<_, SqlxFile>(
-        r#"
-SELECT * FROM file where filename = ?;
-      "#,
-      )
-      .bind(&file_name)
-      .fetch_one(&state.pool.clone())
-      .await
-      .map_err(|e| anyhow::anyhow!(e))?;
-
-      sqlx::query(
-        r#"
-REPLACE INTO knowledge_base_file ( kb_id, file_id )
-VALUES ( ?, ? );
-        "#,
-      )
-      .bind(knowledge_base.id)
-      .bind(file.id)
       .execute(&state.pool.clone())
       .await
       .map_err(|e| anyhow::anyhow!(e))?;
@@ -250,10 +229,7 @@ SELECT * FROM knowledge_base where id = ?;
 
   let sqlx_files = sqlx::query_as::<_, SqlxFile>(
     r#"
-SELECT f.*
-FROM file f
-JOIN knowledge_base_file kbf ON f.id = kbf.file_id
-WHERE kbf.kb_id = ?;
+SELECT * FROM file WHERE kb_id = ?;
     "#,
   )
   .bind(knowledge_base.id)
@@ -295,10 +271,11 @@ SELECT * FROM knowledge_base where id = ?;
 
   let sqlx_file = sqlx::query_as::<_, SqlxFile>(
     r#"
-SELECT * FROM file where id = ?;
+SELECT * FROM file where id = ? AND kb_id = ?;
     "#,
   )
   .bind(file_id)
+  .bind(knowledge_base.id)
   .fetch_one(&state.pool.clone())
   .await
   .map_err(|e| anyhow::anyhow!(e))?;
@@ -315,23 +292,13 @@ SELECT * FROM file where id = ?;
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 
-    sqlx::query(
-      r#"
-DELETE FROM knowledge_base_file where kb_id = ? AND file_id = ?;
-      "#,
-    )
-    .bind(knowledge_base.id)
-    .bind(sqlx_file.id)
-    .execute(&state.pool.clone())
-    .await
-    .map_err(|e| anyhow::anyhow!(e))?;
-
   sqlx::query(
     r#"
-DELETE FROM file where id = ?;
+DELETE FROM file where id = ? AND kb_id = ?;
     "#,
   )
   .bind(sqlx_file.id)
+  .bind(knowledge_base.id)
   .execute(&state.pool.clone())
   .await
   .map_err(|e| anyhow::anyhow!(e))?;

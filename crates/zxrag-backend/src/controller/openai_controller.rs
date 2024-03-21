@@ -202,10 +202,11 @@ pub async fn upload_file(
 
       sqlx::query(
         r#"
-REPLACE INTO file ( filename, bytes, purpose, created_at, updated_at )
-VALUES ( ?, ?, ?, ?, ? );
+REPLACE INTO file ( kb_id, filename, bytes, purpose, created_at, updated_at )
+VALUES ( ?, ?, ?, ?, ?, ? );
         "#,
       )
+      .bind(0)
       .bind(file_name)
       .bind(bytes)
       .bind("fine-tune")
@@ -229,7 +230,7 @@ pub async fn list_files(
 
   let sqlx_files = sqlx::query_as::<_, SqlxFile>(
     r#"
-SELECT * FROM file;
+SELECT * FROM file where kb_id = 0;
     "#,
   )
   .fetch_all(&state.pool.clone())
@@ -258,7 +259,7 @@ pub async fn delete_file(
 ) -> Result<impl IntoResponse, BackendError> {
   let sqlx_file = sqlx::query_as::<_, SqlxFile>(
     r#"
-SELECT * FROM file where id = ?;
+SELECT * FROM file where id = ? AND kb_id = 0;
     "#,
   )
   .bind(file_id)
