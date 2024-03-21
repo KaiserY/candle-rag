@@ -65,12 +65,8 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
         .post(knowledge_base_controller::create_knowledge_base),
     )
     .route(
-      "/:kb_id",
-      delete(knowledge_base_controller::delete_knowledge_base),
-    )
-    .route(
-      "/:kb_id/files",
-      post(knowledge_base_controller::upload_file).get(knowledge_base_controller::list_files),
+      "/embeddings/:kb_id/:file_id/",
+      delete(knowledge_base_controller::embeddings),
     )
     .route(
       "/:kb_id/files/:file_id",
@@ -79,6 +75,14 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     .route(
       "/:kb_id/chat/completions",
       post(knowledge_base_controller::create_chat_completion),
+    )
+    .route(
+      "/:kb_id/files",
+      post(knowledge_base_controller::upload_file).get(knowledge_base_controller::list_files),
+    )
+    .route(
+      "/:kb_id",
+      delete(knowledge_base_controller::delete_knowledge_base),
     );
 
   let v1_routes = Router::new()

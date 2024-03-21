@@ -140,10 +140,16 @@ export function FileTable({ selectedknowledgeBase }: FileTableProps) {
 								Copy payment ID
 							</DropdownMenuItem>
 							<DropdownMenuSeparator />
-							<DropdownMenuItem>View customer</DropdownMenuItem>
 							<DropdownMenuItem
 								onClick={() => {
-									deleteKnowledgeBaseFile(Number(file.id));
+									createEmbeddings(Number(file.id));
+								}}
+							>
+								Create Embeddings
+							</DropdownMenuItem>
+							<DropdownMenuItem
+								onClick={() => {
+									deleteFile(Number(file.id));
 								}}
 							>
 								Delete
@@ -178,11 +184,11 @@ export function FileTable({ selectedknowledgeBase }: FileTableProps) {
 
 	useEffect(() => {
 		if (selectedknowledgeBase.id !== 0) {
-			listKnowledgeBaseFiles();
+			listFiles();
 		}
 	}, [selectedknowledgeBase]);
 
-	const listKnowledgeBaseFiles = async () => {
+	const listFiles = async () => {
 		try {
 			const response = await fetch(
 				`/v1/knowledgebases/${selectedknowledgeBase.id}/files`,
@@ -200,7 +206,7 @@ export function FileTable({ selectedknowledgeBase }: FileTableProps) {
 		}
 	};
 
-	const deleteKnowledgeBaseFile = async (file_id: number) => {
+	const deleteFile = async (file_id: number) => {
 		try {
 			const response = await fetch(
 				`/v1/knowledgebases/${selectedknowledgeBase.id}/files/${file_id}`,
@@ -213,7 +219,26 @@ export function FileTable({ selectedknowledgeBase }: FileTableProps) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 
-			listKnowledgeBaseFiles();
+			listFiles();
+		} catch (error) {
+			console.error(`Fetch error: ${error}`);
+		}
+	};
+
+	const createEmbeddings = async (file_id: number) => {
+		try {
+			const response = await fetch(
+				`/v1/knowledgebases/embeddings/${selectedknowledgeBase.id}/files/${file_id}`,
+				{
+					method: "POST",
+				},
+			);
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			listFiles();
 		} catch (error) {
 			console.error(`Fetch error: ${error}`);
 		}
@@ -240,7 +265,7 @@ export function FileTable({ selectedknowledgeBase }: FileTableProps) {
 					throw new Error(`HTTP error! status: ${response.status}`);
 				}
 
-				listKnowledgeBaseFiles();
+				listFiles();
 			} catch (error) {
 				console.error(`Fetch error: ${error}`);
 			}

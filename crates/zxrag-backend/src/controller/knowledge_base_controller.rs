@@ -1,16 +1,18 @@
-use arrow_array::RecordBatchIterator;
+use arrow_array::types::Float32Type;
+use arrow_array::{FixedSizeListArray, Int64Array, RecordBatch, RecordBatchIterator, StringArray};
 use axum::extract::{Multipart, Path, State};
 use axum::response::{sse::Event, IntoResponse, Json, Sse};
 use opendal::services::Fs;
 use opendal::Operator;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
+use std::sync::Arc;
 use std::time::Duration;
 use time::OffsetDateTime;
 use tinyvec::tiny_vec;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
-use zxrag_core::types::handle::get_text_gen;
+use zxrag_core::types::handle::{get_embedding_model, get_text_gen};
 use zxrag_core::types::lancedb::get_embedding_schema;
 use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
 use zxrag_core::types::openai::*;
@@ -198,7 +200,7 @@ REPLACE INTO file ( kb_id, filename, bytes, purpose, created_at, updated_at )
 VALUES ( ?, ?, ?, ?, ?, ? );
         "#,
       )
-      .bind(&knowledge_base.id)
+      .bind(knowledge_base.id)
       .bind(&file_name)
       .bind(bytes)
       .bind("embedding")
@@ -308,6 +310,105 @@ DELETE FROM file where id = ? AND kb_id = ?;
     object: Cow::Owned("file".to_string()),
     deleted: true,
   }))
+}
+
+pub async fn embeddings(
+  State(state): State<BackendState>,
+  Path((kb_id, file_id)): Path<(String, String)>,
+) -> Result<impl IntoResponse, BackendError> {
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(&kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  let sqlx_file = sqlx::query_as::<_, SqlxFile>(
+    r#"
+SELECT * FROM file where id = ? AND kb_id = ?;
+    "#,
+  )
+  .bind(&file_id)
+  .bind(&kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let mut builder = Fs::default();
+
+  builder.root(&format!("{}/{}", &state.config.opendal_path, kb_table_name));
+
+  let op: Operator = Operator::new(builder)
+    .map_err(|e| anyhow::anyhow!(e))?
+    .finish();
+
+  let file_bytes = op
+    .read(&sqlx_file.filename)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let bert_model = get_embedding_model(state.config.embedding_conf.model_id)?;
+
+  let prompts: Vec<&str> = vec![std::str::from_utf8(&file_bytes).map_err(|e| anyhow::anyhow!(e))?];
+
+  let embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&prompts)?;
+
+  let vectors: Vec<Option<Vec<Option<f32>>>> = embeddings
+    .into_iter()
+    .map(|t| Some(t.into_iter().map(Some).collect()))
+    .collect();
+
+  let schema = get_embedding_schema()?;
+
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  let db = vectordb::connect(&state.config.lancedb_path)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let tbl = db
+    .open_table(&kb_table_name)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let uuid_strings: Vec<Option<String>> = (0..vectors.len())
+    .map(|_| Some(Uuid::new_v4().to_string()))
+    .collect();
+
+  let uuid_str_slices: Vec<Option<&str>> =
+    uuid_strings.iter().map(|uuid| uuid.as_deref()).collect();
+
+  let batches = RecordBatchIterator::new(
+    vec![RecordBatch::try_new(
+      schema.clone(),
+      vec![
+        Arc::new(StringArray::from(uuid_str_slices)),
+        Arc::new(Int64Array::from_iter_values(
+          (0..vectors.len()).map(|_| knowledge_base.id),
+        )),
+        Arc::new(StringArray::from(
+          prompts.into_iter().map(Some).collect::<Vec<Option<&str>>>(),
+        )),
+        Arc::new(FixedSizeListArray::from_iter_primitive::<Float32Type, _, _>(vectors, 1024)),
+      ],
+    )
+    .map_err(|e| anyhow::anyhow!(e))?]
+    .into_iter()
+    .map(Ok),
+    schema.clone(),
+  );
+
+  tbl
+    .add(Box::new(batches), None)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  Ok(())
 }
 
 pub async fn create_chat_completion(
