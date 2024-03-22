@@ -95,7 +95,7 @@ pub async fn create_chat_completion(
   Ok(response)
 }
 
-pub async fn embeddings(
+pub async fn create_embeddings(
   State(state): State<BackendState>,
   Json(req): Json<CreateEmbeddingRequest<'_>>,
 ) -> Result<impl IntoResponse, BackendError> {

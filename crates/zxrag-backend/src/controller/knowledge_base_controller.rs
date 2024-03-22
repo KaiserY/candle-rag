@@ -1,7 +1,10 @@
 use arrow_array::types::Float32Type;
-use arrow_array::{FixedSizeListArray, Int64Array, RecordBatch, RecordBatchIterator, StringArray};
+use arrow_array::{
+  FixedSizeListArray, Int64Array, PrimitiveArray, RecordBatch, RecordBatchIterator, StringArray,
+};
 use axum::extract::{Multipart, Path, State};
 use axum::response::{sse::Event, IntoResponse, Json, Sse};
+use futures::TryStreamExt;
 use opendal::services::Fs;
 use opendal::Operator;
 use serde::{Deserialize, Serialize};
@@ -13,9 +16,14 @@ use tinyvec::tiny_vec;
 use tokio_stream::StreamExt;
 use uuid::Uuid;
 use zxrag_core::types::handle::{get_embedding_model, get_text_gen};
+use zxrag_core::types::knowledge_base::{Embedding, EmbeddingResponse, EmbeddingsUsage};
 use zxrag_core::types::lancedb::get_embedding_schema;
 use zxrag_core::types::llm::{TextGenerationSetting, TextGenerationStream};
-use zxrag_core::types::openai::*;
+use zxrag_core::types::openai::{
+  ChatCompletion, ChatCompletionChoice, ChatCompletionChunk, ChatCompletionChunkChoice,
+  ChatCompletionChunkDelta, ChatCompletionRequest, ChatCompletionUsage, ChatMessage,
+  DeleteFileResponse, File, ListFilesResponse,
+};
 use zxrag_core::types::sqlx::File as SqlxFile;
 use zxrag_core::types::sqlx::KnowledgeBase;
 
@@ -312,7 +320,7 @@ DELETE FROM file where id = ? AND kb_id = ?;
   }))
 }
 
-pub async fn embeddings(
+pub async fn create_embeddings(
   State(state): State<BackendState>,
   Path((kb_id, file_id)): Path<(String, String)>,
 ) -> Result<impl IntoResponse, BackendError> {
@@ -365,8 +373,6 @@ SELECT * FROM file where id = ? AND kb_id = ?;
 
   let schema = get_embedding_schema()?;
 
-  let kb_table_name = format!("kb_{}", knowledge_base.id);
-
   let db = vectordb::connect(&state.config.lancedb_path)
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
@@ -391,6 +397,14 @@ SELECT * FROM file where id = ? AND kb_id = ?;
         Arc::new(Int64Array::from_iter_values(
           (0..vectors.len()).map(|_| knowledge_base.id),
         )),
+        Arc::new(Int64Array::from_iter_values(
+          (0..vectors.len()).map(|_| sqlx_file.id),
+        )),
+        Arc::new(StringArray::from(
+          (0..vectors.len())
+            .map(|_| Some(sqlx_file.filename.as_str()))
+            .collect::<Vec<Option<&str>>>(),
+        )),
         Arc::new(StringArray::from(
           prompts.into_iter().map(Some).collect::<Vec<Option<&str>>>(),
         )),
@@ -405,6 +419,111 @@ SELECT * FROM file where id = ? AND kb_id = ?;
 
   tbl
     .add(Box::new(batches), None)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  Ok(())
+}
+
+pub async fn list_embeddings(
+  State(state): State<BackendState>,
+  Path(kb_id): Path<String>,
+) -> Result<impl IntoResponse, BackendError> {
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(&kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  let db = vectordb::connect(&state.config.lancedb_path)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let tbl = db
+    .open_table(&kb_table_name)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let result = tbl
+    .query()
+    .filter(format!("kb_id = {}", &knowledge_base.id))
+    .execute_stream()
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?
+    .try_collect::<Vec<_>>()
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  tracing::info!("{:?}", result);
+
+  Ok(Json(EmbeddingResponse {
+    object: Cow::Owned("list".to_string()),
+    embeddings: result
+      .into_iter()
+      .enumerate()
+      .map(|(index, batch)| {
+        let embedding_id: StringArray = batch.column(0).to_data().into();
+        let kb_id: Int64Array = batch.column(1).to_data().into();
+        let file_id: Int64Array = batch.column(2).to_data().into();
+        let filename: StringArray = batch.column(3).to_data().into();
+        let text: StringArray = batch.column(4).to_data().into();
+        let vector: FixedSizeListArray = batch.column(5).to_data().into();
+
+        Embedding {
+          id: Cow::Owned(embedding_id.value(0).to_string()),
+          kb_id: kb_id.value(0),
+          file_id: file_id.value(0),
+          filename: Cow::Owned(filename.value(0).to_string()),
+          object: Cow::Owned("embedding".to_string()),
+          text: Cow::Owned(text.value(0).to_string()),
+          embedding: Into::<PrimitiveArray<Float32Type>>::into(vector.value(0).to_data())
+            .values()
+            .to_vec(),
+          index,
+        }
+      })
+      .collect(),
+    model: Cow::Owned(state.config.embedding_conf.model_id.to_string()),
+    usage: EmbeddingsUsage {
+      prompt_tokens: 0,
+      total_tokens: 0,
+    },
+  }))
+}
+
+pub async fn delete_embeddings(
+  State(state): State<BackendState>,
+  Path((kb_id, embedding_id)): Path<(String, String)>,
+) -> Result<impl IntoResponse, BackendError> {
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(&kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
+
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  let db = vectordb::connect(&state.config.lancedb_path)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let tbl = db
+    .open_table(&kb_table_name)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  tbl
+    .delete(&format!("id = {}", embedding_id))
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 

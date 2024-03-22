@@ -19,3 +19,16 @@ export const knowledgeBaseSchema = z.object({
 });
 
 export type KnowledgeBase = z.infer<typeof knowledgeBaseSchema>;
+
+export const embeddingSchema = z.object({
+	id: z.number(),
+	kb_id: z.number(),
+	file_id: z.number(),
+	filename: z.string(),
+	object: z.string(),
+	text: z.string(),
+	embedding: z.array(z.number()),
+	index: z.number(),
+});
+
+export type Embedding = z.infer<typeof embeddingSchema>;

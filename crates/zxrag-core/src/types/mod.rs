@@ -1,5 +1,6 @@
 pub mod conf;
 pub mod handle;
+pub mod knowledge_base;
 pub mod lancedb;
 pub mod llm;
 pub mod model;

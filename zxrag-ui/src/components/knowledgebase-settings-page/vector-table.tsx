@@ -23,7 +23,7 @@ import {
 	useReactTable,
 } from "@tanstack/react-table";
 
-import { KnowledgeBase, File } from "@/schema";
+import { KnowledgeBase, Embedding } from "@/schema";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -61,11 +61,11 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 	const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([]);
 	const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({});
 	const [rowSelection, setRowSelection] = useState({});
-	const [files, setFiles] = useState<File[]>([]);
+	const [embeddings, setEmbeddings] = useState<Embedding[]>([]);
 
 	const inputRef = useRef<HTMLInputElement>(null);
 
-	const columns: ColumnDef<File>[] = [
+	const columns: ColumnDef<Embedding>[] = [
 		{
 			id: "select",
 			header: ({ table }) => (
@@ -94,35 +94,27 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 			cell: ({ row }) => <div>{row.getValue("filename")}</div>,
 		},
 		{
-			accessorKey: "bytes",
+			accessorKey: "text",
 			header: ({ column }) => {
 				return (
 					<Button
 						variant="ghost"
 						onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
 					>
-						Size
+						Text
 						<CaretSortIcon className="ml-2 h-4 w-4" />
 					</Button>
 				);
 			},
 			cell: ({ row }) => (
-				<div className="lowercase">{row.getValue("bytes")}</div>
+				<div className="lowercase">{row.getValue("text")}</div>
 			),
-		},
-		{
-			id: "created",
-			accessorKey: "created_at",
-			header: () => <div className="text-right">Created</div>,
-			cell: ({ row }) => {
-				<div className="capitalize">{row.getValue("created")}</div>;
-			},
 		},
 		{
 			id: "actions",
 			enableHiding: false,
 			cell: ({ row }) => {
-				const file = row.original;
+				const embedding = row.original;
 
 				return (
 					<DropdownMenu>
@@ -135,7 +127,9 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 						<DropdownMenuContent align="end">
 							<DropdownMenuLabel>Actions</DropdownMenuLabel>
 							<DropdownMenuItem
-								onClick={() => navigator.clipboard.writeText(file.id)}
+								onClick={() =>
+									navigator.clipboard.writeText(embedding.id.toString())
+								}
 							>
 								Copy payment ID
 							</DropdownMenuItem>
@@ -143,7 +137,7 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 							<DropdownMenuItem>View customer</DropdownMenuItem>
 							<DropdownMenuItem
 								onClick={() => {
-									deleteKnowledgeBaseFile(Number(file.id));
+									deleteEmbedding(Number(embedding.id));
 								}}
 							>
 								Delete
@@ -156,7 +150,7 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 	];
 
 	const table = useReactTable({
-		data: files,
+		data: embeddings,
 		columns,
 		onSortingChange: setSorting,
 		onColumnFiltersChange: setColumnFilters,
@@ -178,14 +172,14 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 
 	useEffect(() => {
 		if (selectedknowledgeBase.id !== 0) {
-			listKnowledgeBaseFiles();
+			listEmbeddings();
 		}
 	}, [selectedknowledgeBase]);
 
-	const listKnowledgeBaseFiles = async () => {
+	const listEmbeddings = async () => {
 		try {
 			const response = await fetch(
-				`/v1/knowledgebases/${selectedknowledgeBase.id}/files`,
+				`/v1/knowledgebases/${selectedknowledgeBase.id}/embeddings`,
 			);
 
 			if (!response.ok) {
@@ -194,16 +188,16 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 
 			const responseJson = await response.json();
 
-			setFiles(responseJson.data);
+			setEmbeddings(responseJson.data.embeddings);
 		} catch (error) {
 			console.error(`Fetch error: ${error}`);
 		}
 	};
 
-	const deleteKnowledgeBaseFile = async (file_id: number) => {
+	const deleteEmbedding = async (embedding_id: number) => {
 		try {
 			const response = await fetch(
-				`/v1/knowledgebases/${selectedknowledgeBase.id}/files/${file_id}`,
+				`/v1/knowledgebases/${selectedknowledgeBase.id}/embeddings/${embedding_id}`,
 				{
 					method: "DELETE",
 				},
@@ -213,7 +207,7 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 				throw new Error(`HTTP error! status: ${response.status}`);
 			}
 
-			listKnowledgeBaseFiles();
+			listEmbeddings();
 		} catch (error) {
 			console.error(`Fetch error: ${error}`);
 		}
@@ -240,7 +234,7 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 					throw new Error(`HTTP error! status: ${response.status}`);
 				}
 
-				listKnowledgeBaseFiles();
+				listEmbeddings();
 			} catch (error) {
 				console.error(`Fetch error: ${error}`);
 			}

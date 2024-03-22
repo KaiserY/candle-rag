@@ -15,7 +15,7 @@ pub fn set_embedding_schema() -> anyhow::Result<()> {
       Field::new(
         "vector",
         DataType::FixedSizeList(
-          Arc::new(Field::new("item", DataType::Float32, false)),
+          Arc::new(Field::new("item", DataType::Float32, true)),
           1024_i32,
         ),
         false,

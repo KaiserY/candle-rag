@@ -228,7 +228,7 @@ export function FileTable({ selectedknowledgeBase }: FileTableProps) {
 	const createEmbeddings = async (file_id: number) => {
 		try {
 			const response = await fetch(
-				`/v1/knowledgebases/embeddings/${selectedknowledgeBase.id}/files/${file_id}`,
+				`/v1/knowledgebases/${selectedknowledgeBase.id}/embeddings/files/${file_id}`,
 				{
 					method: "POST",
 				},

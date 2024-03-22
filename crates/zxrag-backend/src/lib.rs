@@ -65,12 +65,16 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
         .post(knowledge_base_controller::create_knowledge_base),
     )
     .route(
-      "/embeddings/:kb_id/:file_id/",
-      delete(knowledge_base_controller::embeddings),
+      "/:kb_id/embeddings/files/:file_id",
+      post(knowledge_base_controller::create_embeddings),
     )
     .route(
-      "/:kb_id/files/:file_id",
+      "/:kb_id/embeddings/:embedding_id",
       delete(knowledge_base_controller::delete_file),
+    )
+    .route(
+      "/:kb_id/embeddings",
+      get(knowledge_base_controller::list_embeddings),
     )
     .route(
       "/:kb_id/chat/completions",
@@ -90,7 +94,7 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
       "/chat/completions",
       post(openai_controller::create_chat_completion),
     )
-    .route("/embeddings", post(openai_controller::embeddings))
+    .route("/embeddings", post(openai_controller::create_embeddings))
     .route("/models", post(openai_controller::models))
     .route(
       "/files",
