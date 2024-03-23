@@ -71,12 +71,9 @@ SELECT * FROM knowledge_base where name = ?;
 
     let batches = RecordBatchIterator::new(vec![], schema);
 
-    let tbl = db
-      .create_table(&kb_table_name, Box::new(batches), None)
+    db.create_table(&kb_table_name, Box::new(batches), None)
       .await
       .map_err(|e| anyhow::anyhow!(e))?;
-
-    tracing::info!("create_table = {}", tbl);
   }
 
   Ok(Json(CreateKnowledgeBaseResponse {
@@ -129,8 +126,6 @@ SELECT * FROM knowledge_base where id = ?;
     db.drop_table(&kb_table_name)
       .await
       .map_err(|e| anyhow::anyhow!(e))?;
-
-    tracing::info!("drop_table = {}", kb_table_name);
   }
 
   sqlx::query(
@@ -460,8 +455,6 @@ SELECT * FROM knowledge_base where id = ?;
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 
-  tracing::info!("{:?}", result);
-
   Ok(Json(EmbeddingResponse {
     object: Cow::Owned("list".to_string()),
     embeddings: result
@@ -523,7 +516,7 @@ SELECT * FROM knowledge_base where id = ?;
     .map_err(|e| anyhow::anyhow!(e))?;
 
   tbl
-    .delete(&format!("id = {}", embedding_id))
+    .delete(&format!("id = '{}'", embedding_id))
     .await
     .map_err(|e| anyhow::anyhow!(e))?;
 

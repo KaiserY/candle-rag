@@ -70,7 +70,7 @@ pub async fn run_backend(config: BackendConf) -> anyhow::Result<()> {
     )
     .route(
       "/:kb_id/embeddings/:embedding_id",
-      delete(knowledge_base_controller::delete_file),
+      delete(knowledge_base_controller::delete_embeddings),
     )
     .route(
       "/:kb_id/embeddings",

@@ -137,7 +137,7 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 							<DropdownMenuItem>View customer</DropdownMenuItem>
 							<DropdownMenuItem
 								onClick={() => {
-									deleteEmbedding(Number(embedding.id));
+									deleteEmbedding(embedding.id);
 								}}
 							>
 								Delete
@@ -188,13 +188,13 @@ export function VectorTable({ selectedknowledgeBase }: FileTableProps) {
 
 			const responseJson = await response.json();
 
-			setEmbeddings(responseJson.data.embeddings);
+			setEmbeddings(responseJson.embeddings);
 		} catch (error) {
 			console.error(`Fetch error: ${error}`);
 		}
 	};
 
-	const deleteEmbedding = async (embedding_id: number) => {
+	const deleteEmbedding = async (embedding_id: string) => {
 		try {
 			const response = await fetch(
 				`/v1/knowledgebases/${selectedknowledgeBase.id}/embeddings/${embedding_id}`,

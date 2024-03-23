@@ -8,7 +8,7 @@ import {
 
 import { LayoutPage } from "@/pages/layout-page";
 import { ChatPage } from "@/pages/chat-page";
-import { KnowledgebasePage } from "@/pages/knowledgebase-page";
+import { KnowledgebaseChatPage } from "@/pages/knowledgebase-chat-page";
 import { KnowledgebaseFilesPage } from "@/pages/knowledgebase-files-page";
 import { KnowledgebaseSettingsPage } from "@/pages/knowledgebase-settings-page";
 import { OCRPage } from "@/pages/ocr-page";
@@ -24,7 +24,7 @@ export default function App() {
 				<Route index element={<ChatPage />} />
 				<Route path="chat" element={<ChatPage />} />
 				<Route path="knowledgebase">
-					<Route path="chat" element={<KnowledgebasePage />} />
+					<Route path="chat" element={<KnowledgebaseChatPage />} />
 					<Route path="settings" element={<KnowledgebaseSettingsPage />} />
 					<Route path="files" element={<KnowledgebaseFilesPage />} />
 				</Route>
