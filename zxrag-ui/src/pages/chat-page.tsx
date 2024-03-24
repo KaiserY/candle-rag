@@ -166,7 +166,7 @@ export function ChatPage() {
 						{chatMessages.map((chat) => {
 							if (chat.role === "user") {
 								return (
-									<div className="flex gap-3 w-full p-2">
+									<div key={crypto.randomUUID()} className="flex gap-3 w-full p-2">
 										<Avatar className="h-6 w-6">
 											<AvatarFallback>Y</AvatarFallback>
 										</Avatar>
@@ -179,7 +179,7 @@ export function ChatPage() {
 							}
 							if (chat.role === "assistant") {
 								return (
-									<div className="flex gap-3 w-full p-2">
+									<div key={crypto.randomUUID()} className="flex gap-3 w-full p-2">
 										<Avatar className="h-6 w-6">
 											<AvatarFallback className="bg-red-500 text-white">
 												A

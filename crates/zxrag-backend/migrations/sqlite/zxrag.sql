@@ -18,3 +18,10 @@ CREATE TABLE IF NOT EXISTS knowledge_base (
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_name ON knowledge_base (name);
+
+CREATE TABLE IF NOT EXISTS chat_session (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL
+);

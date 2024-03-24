@@ -525,17 +525,72 @@ SELECT * FROM knowledge_base where id = ?;
 
 pub async fn create_chat_completion(
   State(state): State<BackendState>,
-  Path(_table_id): Path<String>,
-  Json(req): Json<ChatCompletionRequest<'_>>,
+  Path(kb_id): Path<String>,
+  Json(mut req): Json<ChatCompletionRequest<'_>>,
 ) -> Result<impl IntoResponse, BackendError> {
   let fp = format!("zxrag-{}", env!("CARGO_PKG_VERSION"));
 
-  let untokenized_context = req.messages.to_prompt(state.config.llm_conf.model_id)?;
+  let knowledge_base = sqlx::query_as::<_, KnowledgeBase>(
+    r#"
+SELECT * FROM knowledge_base where id = ?;
+    "#,
+  )
+  .bind(&kb_id)
+  .fetch_one(&state.pool.clone())
+  .await
+  .map_err(|e| anyhow::anyhow!(e))?;
 
-  let _last_message = req
+  let kb_table_name = format!("kb_{}", knowledge_base.id);
+
+  let db = vectordb::connect(&state.config.lancedb_path)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let tbl = db
+    .open_table(&kb_table_name)
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?;
+
+  let last_message = req
     .messages
-    .last()
+    .last_mut()
     .ok_or(anyhow::anyhow!("messages is empty"))?;
+
+  let bert_model = get_embedding_model(state.config.embedding_conf.model_id)?;
+
+  let last_message_str = last_message.to_string();
+
+  let prompts: Vec<&str> = vec![&last_message_str];
+
+  let embeddings: Vec<Vec<f32>> = bert_model.embedding_batch(&prompts)?;
+
+  let result: Vec<String> = tbl
+    .search(&embeddings[0])
+    .limit(1)
+    .execute_stream()
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?
+    .try_collect::<Vec<_>>()
+    .await
+    .map_err(|e| anyhow::anyhow!(e))?
+    .iter()
+    .map(|batch| {
+      let text: StringArray = batch.column(4).to_data().into();
+
+      text.value(0).to_string()
+    })
+    .collect();
+
+  *last_message = ChatMessage::User {
+    content: either::Left(Cow::Owned(format!(
+      "{} answer question use the follwing information: {}",
+      last_message_str,
+      result.join("\n")
+    ))),
+    name: None,
+  };
+
+  let untokenized_context = req.messages.to_prompt(state.config.llm_conf.model_id)?;
 
   let text_gen_setting = TextGenerationSetting {
     temperature: req.temperature.unwrap_or(0.8),

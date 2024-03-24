@@ -1,10 +1,12 @@
 import OpenAI from "openai";
 import { ReloadIcon, TrashIcon } from "@radix-ui/react-icons";
-import { ChangeEvent, useState } from "react";
+import { ChangeEvent, useState, useEffect } from "react";
 
+import { KnowledgeBase } from "@/schema";
 import { TemperatureSelector } from "@/components/temperature-selector";
 import { MaxLengthSelector } from "@/components/maxlength-selector";
 import { TopPSelector } from "@/components/top-p-selector";
+import { KnowledgeBaseSelector } from "@/components/knowledgebase-selector";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -24,12 +26,35 @@ export function KnowledgebaseChatPage() {
 	const [lastAssistantMessage, setLastAssistantMessage] = useState("");
 	const [systemMessage, setSystemMessage] = useState("");
 	const [isLoading, setIsLoading] = useState<boolean>(false);
+	const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+	const [selectedknowledgeBase, setSelectedknowledgeBase] =
+		useState<KnowledgeBase>({ id: 0, name: "", created_at: 0, updated_at: 0 });
 
-	const openai = new OpenAI({
-		baseURL: `${window.location.protocol}//${window.location.host}/v1`,
-		apiKey: "NULL",
-		dangerouslyAllowBrowser: true,
-	});
+	useEffect(() => {
+		listKnowledgeBases();
+	}, []);
+
+	const listKnowledgeBases = async () => {
+		try {
+			const response = await fetch("/v1/knowledgebases");
+
+			if (!response.ok) {
+				throw new Error(`HTTP error! status: ${response.status}`);
+			}
+
+			const responseJson = await response.json();
+
+			const knowledgeBases: KnowledgeBase[] = responseJson.data;
+
+			setKnowledgeBases(knowledgeBases);
+
+			if (selectedknowledgeBase.id === 0 && knowledgeBases.length > 0) {
+				setSelectedknowledgeBase(knowledgeBases[0]);
+			}
+		} catch (error) {
+			console.error(`Fetch error: ${error}`);
+		}
+	};
 
 	const handleUserMessageChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
 		setLastUserMessage(event.target.value);
@@ -70,6 +95,12 @@ export function KnowledgebaseChatPage() {
 		setLastUserMessage("");
 
 		try {
+			const openai = new OpenAI({
+				baseURL: `${window.location.protocol}//${window.location.host}/v1/knowledgebases/${selectedknowledgeBase.id}/`,
+				apiKey: "NULL",
+				dangerouslyAllowBrowser: true,
+			});
+
 			const stream = await openai.chat.completions.create({
 				model: "NULL",
 				messages: [
@@ -166,7 +197,7 @@ export function KnowledgebaseChatPage() {
 						{chatMessages.map((chat) => {
 							if (chat.role === "user") {
 								return (
-									<div className="flex gap-3 w-full p-2">
+									<div key={crypto.randomUUID()} className="flex gap-3 w-full p-2">
 										<Avatar className="h-6 w-6">
 											<AvatarFallback>Y</AvatarFallback>
 										</Avatar>
@@ -179,7 +210,7 @@ export function KnowledgebaseChatPage() {
 							}
 							if (chat.role === "assistant") {
 								return (
-									<div className="flex gap-3 w-full p-2">
+									<div key={crypto.randomUUID()} className="flex gap-3 w-full p-2">
 										<Avatar className="h-6 w-6">
 											<AvatarFallback className="bg-red-500 text-white">
 												A
@@ -209,6 +240,11 @@ export function KnowledgebaseChatPage() {
 						)}
 					</div>
 					<div className="flex flex-col basis-2/12 space-y-4">
+						<KnowledgeBaseSelector
+							knowledgeBases={knowledgeBases}
+							selectedknowledgeBase={selectedknowledgeBase}
+							setSelectedknowledgeBase={setSelectedknowledgeBase}
+						/>
 						<TemperatureSelector
 							temperature={temperature}
 							setTemperature={setTemperature}

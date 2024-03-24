@@ -154,6 +154,30 @@ pub enum ChatMessage<'a> {
   },
 }
 
+impl<'a> Display for ChatMessage<'a> {
+  fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+    match self {
+      ChatMessage::System {
+        content: Some(data),
+        ..
+      } => write!(f, "{}", data),
+      ChatMessage::User {
+        content: Either::Left(data),
+        ..
+      } => write!(f, "{}", data),
+      ChatMessage::Assistant {
+        content: Some(data),
+        ..
+      } => write!(f, "{}", data),
+      ChatMessage::Tool {
+        content: Some(data),
+        ..
+      } => write!(f, "{}", data),
+      _ => write!(f, "",),
+    }
+  }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct AssistantToolCall<'a> {
   pub id: Cow<'a, str>,
