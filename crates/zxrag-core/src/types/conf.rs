@@ -20,6 +20,7 @@ pub struct LlmConf {
   pub model_id: ModelId,
   pub model_engine: ModelEngine,
   pub model_path: String,
+  pub repo_id: String,
   pub tokenizer_path: String,
   pub device: String,
 }
@@ -30,19 +31,9 @@ pub struct EmbeddingConf {
   pub model_id: ModelId,
   pub model_engine: ModelEngine,
   pub model_path: String,
+  pub repo_id: String,
   pub tokenizer_path: String,
   pub device: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct ChatCompletionSetting {
-  pub temperature: f64,
-  pub top_p: Option<f64>,
-  pub seed: u64,
-  pub repeat_penalty: f32,
-  pub repeat_last_n: usize,
-  pub sample_len: usize,
-  pub prompt: Option<String>,
 }
 
 pub fn init_backend_conf(cli_conf_path: &str) -> Result<BackendConf, anyhow::Error> {
@@ -51,11 +42,13 @@ pub fn init_backend_conf(cli_conf_path: &str) -> Result<BackendConf, anyhow::Err
     .set_default("log_file_name", "zxrag.log")?
     .set_default("bind_addr", "0.0.0.0:3000")?
     .set_default("llm_conf.model_id", "none")?
-    .set_default("llm_conf.model_engine", "llama.cpp")?
+    .set_default("llm_conf.model_engine", "gguf")?
+    .set_default("llm_conf.repo_id", "")?
     .set_default("llm_conf.model_path", "")?
     .set_default("llm_conf.tokenizer_path", "")?
     .set_default("embedding_conf.model_id", "none")?
     .set_default("embedding_conf.model_engine", "huggingface")?
+    .set_default("embedding_conf.repo_id", "")?
     .set_default("embedding_conf.model_path", "")?
     .set_default("embedding_conf.tokenizer_path", "")?
     .set_default("lancedb_path", "lancedb")?

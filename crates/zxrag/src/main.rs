@@ -10,15 +10,46 @@ use time::format_description::well_known;
 use time::UtcOffset;
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 use zxrag_backend::run_backend;
-use zxrag_core::types::conf::{init_backend_conf, BackendConf};
+use zxrag_core::types::conf::{init_backend_conf, BackendConf, LlmConf};
 use zxrag_core::types::handle::{
   get_embedding_model, get_text_gen, set_embedding_model_handle, set_llm_model_handle,
 };
 use zxrag_core::types::lancedb::set_embedding_schema;
 use zxrag_core::types::llm::TextGenerationSetting;
+use zxrag_core::types::model::{ModelEngine, ModelId};
 
 #[derive(Debug, Default, Args)]
 pub struct CliConfig {
+  #[clap(long, default_value_t = ModelId::None)]
+  pub model_id: ModelId,
+  #[clap(long, default_value_t = ModelEngine::Gguf)]
+  pub model_engine: ModelEngine,
+  #[clap(long)]
+  pub model_path: String,
+  #[clap(long)]
+  pub repo_id: String,
+  #[clap(long)]
+  pub tokenizer_path: String,
+  #[clap(long, default_value_t = String::from("cpu"))]
+  pub device: String,
+  #[arg(long, default_value_t = 1.1)]
+  repeat_penalty: f32,
+  #[arg(long, default_value_t = 64)]
+  repeat_last_n: usize,
+  #[arg(long, default_value_t = String::from("Hello !"))]
+  prompt: String,
+  #[arg(long, default_value_t = 0.8)]
+  temperature: f64,
+  #[arg(long)]
+  top_p: Option<f64>,
+  #[arg(long, default_value_t = 299792458)]
+  seed: u64,
+  #[arg(long, short = 'n', default_value_t = 10000)]
+  sample_len: usize,
+}
+
+#[derive(Debug, Default, Args)]
+pub struct BackendConfig {
   #[clap(long, default_value_t = String::from("zxrag.toml"))]
   pub config: String,
 }
@@ -34,15 +65,40 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
   #[clap(about = "Run the backend")]
-  Backend(CliConfig),
+  Backend(BackendConfig),
   #[clap(about = "Run the Cli")]
   Cli(CliConfig),
+  #[clap(about = "Run the Test")]
+  Test(BackendConfig),
 }
 
 fn main() -> Result<(), anyhow::Error> {
   let cli = Cli::parse();
 
   match cli.command {
+    Commands::Cli(cli_config) => {
+      let llm_conf = LlmConf{
+        enabled: true,
+        model_id: cli_config.model_id,
+        model_engine: cli_config.model_engine,
+        model_path :cli_config.model_path,
+        repo_id: cli_config.repo_id,
+        tokenizer_path: cli_config.tokenizer_path,
+        device: cli_config.device,
+      };
+
+      let text_gen_setting = TextGenerationSetting{
+        temperature: cli_config.temperature,
+        top_p: cli_config.top_p,
+        seed: cli_config.seed,
+        repeat_penalty: cli_config.repeat_penalty,
+        repeat_last_n: cli_config.repeat_last_n,
+        sample_len: cli_config.sample_len,
+        prompt: cli_config.prompt,
+      };
+
+
+    }
     Commands::Backend(cli_config) => {
       let config: BackendConf = init_backend_conf(&cli_config.config)?;
 
@@ -81,7 +137,7 @@ fn main() -> Result<(), anyhow::Error> {
 
       run_backend(config)?;
     }
-    Commands::Cli(cli_config) => {
+    Commands::Test(cli_config) => {
       let config: BackendConf = init_backend_conf(&cli_config.config)?;
 
       tracing::info!("config={:?}", config);

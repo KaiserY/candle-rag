@@ -54,9 +54,9 @@ pub enum ModelEngine {
   #[serde(rename = "huggingface")]
   #[strum(serialize = "huggingface")]
   HuggingFace,
-  #[serde(rename = "llama.cpp")]
-  #[strum(serialize = "llama.cpp")]
-  LlamaCpp,
+  #[serde(rename = "gguf")]
+  #[strum(serialize = "gguf")]
+  Gguf,
   #[default]
   None,
 }
