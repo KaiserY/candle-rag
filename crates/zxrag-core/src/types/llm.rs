@@ -1,6 +1,7 @@
 use candle_core::{Device, Tensor};
 use candle_transformers::generation::LogitsProcessor;
 use futures::Stream;
+use serde::{Deserialize, Serialize};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokenizers::Tokenizer;
@@ -21,6 +22,7 @@ pub trait LlmModel: Send + Sync {
   fn forward(&mut self, x: &Tensor, index_pos: usize) -> anyhow::Result<Tensor>;
 }
 
+#[derive(Debug, Default, Deserialize, Serialize)]
 pub struct TextGenerationSetting {
   pub temperature: f64,
   pub top_p: Option<f64>,

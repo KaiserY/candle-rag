@@ -23,6 +23,9 @@ pub enum ModelId {
   #[serde(rename = "bge-large-zh-v1.5")]
   #[strum(serialize = "bge-large-zh-v1.5")]
   BgeLargeZhV1_5,
+  #[serde(rename = "codegemma-7b-it")]
+  #[strum(serialize = "codegemma-7b-it")]
+  CodeGemma7bIt,
   #[default]
   None,
 }

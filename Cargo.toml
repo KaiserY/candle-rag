@@ -10,17 +10,17 @@ edition = "2021"
 zxrag = { path = "./crates/zxrag", version = "0.1.0" }
 zxrag-backend = { path = "./crates/zxrag-backend", version = "0.1.0" }
 zxrag-core = { path = "./crates/zxrag-core", version = "0.1.0" }
-anyhow = "1.0.81"
+anyhow = "1.0.82"
 candle-core = "0.4.1"
 candle-examples = "0.4.1"
 candle-nn = "0.4.1"
 candle-transformers = "0.4.1"
-clap = { version = "4.5.3", features = ["derive"] }
+clap = { version = "4.5.4", features = ["derive"] }
 tokenizers = { version = "0.15.2", default-features = false }
 hf-hub = "0.3.2"
 serde = { version = "1.0.197", features = ["derive"] }
-serde_json = "1.0.114"
-tokio = { version = "1.36.0", features = ["full"] }
+serde_json = "1.0.115"
+tokio = { version = "1.37.0", features = ["full"] }
 tokio-stream = "0.1.15"
 config = "0.14.0"
 tracing = "0.1.40"
@@ -33,7 +33,7 @@ tracing-subscriber = { version = "0.3.18", features = [
 ] }
 tracing-appender = "0.2.3"
 tracing-chrome = "0.7.2"
-time = { version = "0.3.34", features = ["local-offset"] }
+time = { version = "0.3.36", features = ["local-offset"] }
 strum = { version = "0.26.2", features = ["derive"] }
 axum = { version = "0.7.5", features = ["tracing", "multipart"] }
 axum-extra = { version = "0.9.3", features = ["cookie"] }
@@ -48,13 +48,13 @@ tower-http = { version = "0.5.2", features = [
 ] }
 mime_guess = "2.0.4"
 hex = "0.4.3"
-either = { version = "1.10.0", features = ["serde"] }
+either = { version = "1.11.0", features = ["serde"] }
 derive_more = "0.99.17"
 futures = "0.3.30"
 uuid = { version = "1.8.0", features = ["v7"] }
 tinyvec = { version = "1.6.0", features = ["serde"] }
 pin-project = "1.1.5"
-bindgen_cuda = "0.1.4"
+bindgen_cuda = "0.1.5"
 vectordb = "0.4.10"
 dyn-clone = "1.0.17"
 arrow-schema = "50.0.0"

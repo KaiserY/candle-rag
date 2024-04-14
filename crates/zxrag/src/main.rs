@@ -97,7 +97,9 @@ fn main() -> Result<(), anyhow::Error> {
         prompt: cli_config.prompt,
       };
 
+      tracing::info!("llm_conf={:?}", llm_conf);
 
+      tracing::info!("text_gen_setting={:?}", text_gen_setting);
     }
     Commands::Backend(cli_config) => {
       let config: BackendConf = init_backend_conf(&cli_config.config)?;
